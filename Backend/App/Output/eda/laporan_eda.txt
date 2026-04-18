@@ -1,0 +1,55 @@
+=======================================================
+  EDA - DATA HARGA CABAI KOTA PADANG
+=======================================================
+Data dimuat: 1,536 baris, 62 kolom
+Rentang: 2022-02-02 s/d 2026-04-17
+
+[1] Membuat grafik tren harga cabai...
+    -> Disimpan: 01_tren_harga_cabai.png
+
+[2] Membuat grafik distribusi harga...
+    Cabai Merah Keriting:
+      Mean   : Rp     48,921
+      Median : Rp     43,000
+      Std    : Rp     18,313
+      Skew   : 0.814
+    Cabai Rawit Hijau:
+      Mean   : Rp     41,184
+      Median : Rp     39,000
+      Std    : Rp     12,379
+      Skew   : 0.727
+    -> Disimpan: 02_distribusi_harga.png
+
+[3] Membuat grafik pola musiman...
+    -> Disimpan: 03_harga_per_bulan.png
+
+[4] Membuat grafik harga vs cuaca...
+    Korelasi harga_cabai_merah vs suhu_rata: -0.053
+    Korelasi harga_cabai_merah vs curah_hujan: 0.045
+    Korelasi harga_cabai_merah vs kelembaban: 0.085
+    -> Disimpan: 04_harga_vs_cuaca.png
+
+[5] Membuat heatmap korelasi...
+    Top 10 fitur paling berkorelasi dengan harga_cabai_merah:
+      lag_1                          : 0.990
+      roll_mean_7                    : 0.954
+      lag_7                          : 0.883
+      roll_mean_30                   : 0.812
+      lag_14                         : 0.761
+      harga_cabai_rawit              : 0.563
+      lag_30                         : 0.507
+      momentum_7                     : 0.239
+      roll_std_7                     : 0.216
+      bulan_sin                      : 0.152
+    -> Disimpan: 05_heatmap_korelasi.png
+
+[6] Membuat grafik missing value...
+    -> Tidak ada missing value — grafik dilewati
+
+[7] Membuat boxplot outlier...
+    harga_cabai_merah: 0 outlier (IQR method)
+    harga_cabai_rawit: 9 outlier (IQR method)
+    suhu_rata: 30 outlier (IQR method)
+    curah_hujan: 716 outlier (IQR method)
+    kelembaban: 667 outlier (IQR method)
+    -> Disimpan: 07_outlier_boxplot.png

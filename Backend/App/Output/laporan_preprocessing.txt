@@ -1,0 +1,99 @@
+=======================================================
+  PREPROCESSING DATA HARGA CABAI - KOTA PADANG v2
+=======================================================
+
+[1] Memuat data cuaca BMKG...
+    -> Ditemukan 20 file cuaca
+    + laporan_iklim_harian-260412123305.xlsx: 31 baris
+    + laporan_iklim_harian-260412123336.xlsx: 30 baris
+    + laporan_iklim_harian-260412123356.xlsx: 31 baris
+    + laporan_iklim_harian-260412123546.xlsx: 31 baris
+    + laporan_iklim_harian-260412123600.xlsx: 30 baris
+    + laporan_iklim_harian-260412123612.xlsx: 31 baris
+    + laporan_iklim_harian-260412123625.xlsx: 30 baris
+    + laporan_iklim_harian-260412123644.xlsx: 31 baris
+    + laporan_iklim_harian-260412123909.xlsx: 31 baris
+    + laporan_iklim_harian-260412123919.xlsx: 28 baris
+    + laporan_iklim_harian-260412123929.xlsx: 31 baris
+    + laporan_iklim_harian-260412123942.xlsx: 30 baris
+    + laporan_iklim_harian-260412123949.xlsx: 31 baris
+    + laporan_iklim_harian-260412124115.xlsx: 30 baris
+    + laporan_iklim_harian-260412124123.xlsx: 31 baris
+    + laporan_iklim_harian-260412124129.xlsx: 31 baris
+    + laporan_iklim_harian-260412124203.xlsx: 30 baris
+    + laporan_iklim_harian-260412124217.xlsx: 31 baris
+    + laporan_iklim_harian-260412124226.xlsx: 30 baris
+    + laporan_iklim_harian-260412124241.xlsx: 31 baris
+    -> Missing sebelum interpolasi : {'suhu_rata': 32, 'kelembaban': 32, 'curah_hujan': 55, 'lama_penyinaran': 32, 'kec_angin': 31}
+    -> Missing setelah interpolasi : {'suhu_rata': 0, 'kelembaban': 0, 'curah_hujan': 0, 'lama_penyinaran': 0, 'kec_angin': 0}
+    -> Shape final : (610, 6)
+    -> Rentang     : 2024-05-01 s/d 2025-12-31
+
+[2] Memuat data harga cabai...
+    -> Ditemukan 5 file harga
+    + Tabel Harga Berdasarkan Daerah 2022.xlsx
+    + Tabel Harga Berdasarkan Daerah 2023.xlsx
+    + Tabel Harga Berdasarkan Daerah 2024.xlsx
+    + Tabel Harga Berdasarkan Daerah 2025.xlsx
+    + Tabel Harga Berdasarkan Daerah 2026.xlsx
+    ! Outlier 'harga_cabai_merah': 7 nilai di luar [-2,094, 98,156] -> diganti NaN
+    ! Outlier 'harga_cabai_rawit': 28 nilai di luar [5,625, 74,625] -> diganti NaN
+    -> Interpolasi 'harga_cabai_merah': 489 hari kosong diisi
+    -> Interpolasi 'harga_cabai_rawit': 510 hari kosong diisi
+    -> Shape final : (1566, 3)
+    -> Rentang     : 2022-01-03 s/d 2026-04-17
+
+[3] Memuat data hari libur...
+    -> Ditemukan 5 file JSON
+    + 2022.json: 20 hari libur
+    + 2023.json: 27 hari libur
+    + 2024.json: 29 hari libur
+    + 2025.json: 28 hari libur
+    + 2026.json: 24 hari libur
+    -> Total hari libur : 128
+    -> Tahun            : [2022, 2023, 2024, 2025, 2026]
+
+[4] Menggabungkan semua data...
+    ! 'suhu_rata': 61.0% missing setelah merge
+    ! 'kelembaban': 61.0% missing setelah merge
+    ! 'curah_hujan': 61.0% missing setelah merge
+    -> Shape setelah merge  : (1566, 9)
+    -> Hari libur ditandai  : 116 hari
+
+[5] Feature engineering...
+    -> Total fitur dibuat : 60
+
+[6] Final cleaning & validasi...
+    -> Baris dihapus (warm-up) : 30
+    -> Shape final             : (1536, 62)
+    -> Total missing values    : 0
+    -> Nilai target <= 0       : 0
+
+=======================================================
+  RINGKASAN DATASET FINAL
+=======================================================
+  Jumlah baris    : 1,536
+  Jumlah fitur    : 60
+  Rentang tanggal : 2022-02-02 -> 2026-04-17
+  Harga Cabai Merah:
+    Min  : Rp     22,000
+    Max  : Rp     97,250
+    Mean : Rp     48,921
+    Std  : Rp     18,313
+  Harga Cabai Rawit:
+    Min  : Rp     19,000
+    Max  : Rp     74,500
+    Mean : Rp     41,184
+=======================================================
+
+[7] Normalisasi fitur (MinMaxScaler)...
+    -> Jumlah fitur dinormalisasi : 59
+    -> Scaler disimpan ke         : C:\Data Afiq\Tugas\APM\Project TB APM\Backend\machine learning\model XGBoost\scaler.pkl
+    -> Range setelah scaling      : min=-0.327, max=1.661
+
+[8] Menyimpan semua output...
+    + dataset_preprocessed.csv  (1,536 baris, nilai asli)
+    + dataset_scaled.csv        (1,536 baris, nilai [0,1])
+    + train.csv  (1,228 baris, s/d 2025-06-13)
+    + test.csv   (308 baris, mulai 2025-06-14)
+    + info_fitur.csv     (59 fitur)

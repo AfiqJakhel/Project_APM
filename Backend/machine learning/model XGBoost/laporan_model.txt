@@ -1,0 +1,53 @@
+=======================================================
+  LAPORAN EVALUASI MODEL XGBOOST
+  Prediksi Harga Cabai Merah — Kota Padang
+=======================================================
+
+INFORMASI MODEL
+----------------------------------------
+  Algoritma   : XGBRegressor
+  Objective   : reg:squarederror
+  Tree Method : hist
+  Random State: 42
+  Catatan     : Fitur di-scale [0,1], TARGET dalam Rupiah asli
+
+HYPERPARAMETER TERBAIK
+----------------------------------------
+  subsample             : 0.6
+  reg_lambda            : 2.0
+  reg_alpha             : 0.1
+  n_estimators          : 300
+  min_child_weight      : 7
+  max_depth             : 5
+  learning_rate         : 0.02
+  gamma                 : 0
+  colsample_bytree      : 1.0
+
+METRIK EVALUASI — SKALA RUPIAH ASLI
+----------------------------------------
+  MAE  : Rp     1,846.63
+  RMSE : Rp     2,611.75
+  MAPE : 3.2991 %
+  R²   : 0.982921
+
+TOP 10 FITUR TERPENTING
+----------------------------------------
+   1. lag_1                        : 0.841270
+   2. kuartal                      : 0.015243
+   3. is_natal_tahunbaru           : 0.013719
+   4. is_hari_hujan                : 0.009365
+   5. bulan_cos                    : 0.009219
+   6. suhu_rata                    : 0.008765
+   7. rawit_lag_7                  : 0.008494
+   8. volatilitas_14               : 0.008209
+   9. roll_std_30                  : 0.007866
+  10. roll_hujan_30                : 0.007539
+
+FILE OUTPUT
+----------------------------------------
+  Model          : C:\TUGA STUGAS\semester 6\APM\Project_APM\Backend\machine learning\model XGBoost\xgboost_cabai.pkl
+  Best Params    : C:\TUGA STUGAS\semester 6\APM\Project_APM\Backend\machine learning\model XGBoost\best_params.json
+  Feature Imp.   : C:\TUGA STUGAS\semester 6\APM\Project_APM\Backend\machine learning\model XGBoost\feature_importance.csv
+  Plot Prediksi  : C:\TUGA STUGAS\semester 6\APM\Project_APM\Backend\machine learning\model XGBoost\prediksi_vs_aktual.png
+  Learning Curve : C:\TUGA STUGAS\semester 6\APM\Project_APM\Backend\machine learning\model XGBoost\learning_curve.png
+=======================================================

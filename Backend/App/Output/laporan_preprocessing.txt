@@ -1,5 +1,6 @@
 =======================================================
-  PREPROCESSING DATA HARGA CABAI - KOTA PADANG v2
+  PREPROCESSING DATA HARGA CABAI - KOTA PADANG v3
+  (dengan seleksi fitur otomatis)
 =======================================================
 
 [1] Memuat data cuaca BMKG...
@@ -60,12 +61,12 @@
     -> Shape setelah merge  : (1566, 9)
     -> Hari libur ditandai  : 116 hari
 
-[5] Feature engineering...
-    -> Total fitur dibuat : 60
+[5] Feature engineering (v2 — fitur selektif)...
+    -> Total fitur dibuat : 33
 
 [6] Final cleaning & validasi...
     -> Baris dihapus (warm-up) : 30
-    -> Shape final             : (1536, 62)
+    -> Shape final             : (1536, 35)
     -> Total missing values    : 0
     -> Nilai target <= 0       : 0
 
@@ -73,7 +74,7 @@
   RINGKASAN DATASET FINAL
 =======================================================
   Jumlah baris    : 1,536
-  Jumlah fitur    : 60
+  Jumlah kolom    : 35
   Rentang tanggal : 2022-02-02 -> 2026-04-17
   Harga Cabai Merah:
     Min  : Rp     22,000
@@ -86,14 +87,23 @@
     Mean : Rp     41,184
 =======================================================
 
+[5B] Seleksi fitur otomatis...
+    ! Hapus fitur hampir konstan (std < 0.01): ['is_pra_lebaran', 'is_pasca_lebaran']
+    ! Hapus fitur korelasi tinggi (r > 0.95): ['bulan', 'lag_14', 'roll_mean_7']
+    -> Fitur sebelum seleksi : 29
+    -> Fitur dihapus         : 5 fitur
+    -> Fitur setelah seleksi : 24 fitur
+    -> Fitur final           : ['suhu_rata', 'curah_hujan', 'is_libur_nasional', 'kuartal', 'is_weekend', 'is_awal_bulan', 'bulan_sin', 'bulan_cos', 'is_lebaran', 'is_natal_tahunbaru', 'is_musim_panen', 'lag_1', 'lag_7', 'lag_30', 'rawit_lag_1', 'rawit_lag_7', 'roll_std_7', 'roll_mean_30', 'roll_std_30', 'momentum_7', 'rasio_tren_7_30', 'volatilitas_14', 'roll_hujan_30', 'is_hari_hujan']
+
 [7] Normalisasi fitur (MinMaxScaler)...
-    -> Jumlah fitur dinormalisasi : 59
-    -> Scaler disimpan ke         : C:\Data Afiq\Tugas\APM\Project TB APM\Backend\machine learning\model XGBoost\scaler.pkl
-    -> Range setelah scaling      : min=-0.327, max=1.661
+    -> Jumlah fitur dinormalisasi : 24
+    -> Total kolom output         : 27 (tanggal + 24 fitur + target)
+    -> Scaler disimpan ke         : C:\TUGA STUGAS\semester 6\APM\Project_APM\Backend\machine learning\model XGBoost\scaler.pkl
+    -> Range setelah scaling      : min=0.000, max=1.661
 
 [8] Menyimpan semua output...
-    + dataset_preprocessed.csv  (1,536 baris, nilai asli)
-    + dataset_scaled.csv        (1,536 baris, nilai [0,1])
-    + train.csv  (1,228 baris, s/d 2025-06-13)
-    + test.csv   (308 baris, mulai 2025-06-14)
-    + info_fitur.csv     (59 fitur)
+    + dataset_preprocessed.csv  (1,536 baris, 35 kolom, nilai asli)
+    + dataset_scaled.csv        (1,536 baris, 27 kolom, nilai [0,1])
+    + train.csv  (1,228 baris, 27 kolom, s/d 2025-06-13)
+    + test.csv   (308 baris, 27 kolom, mulai 2025-06-14)
+    + info_fitur.csv     (24 fitur setelah seleksi)

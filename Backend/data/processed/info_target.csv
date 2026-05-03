@@ -1,0 +1,5 @@
+target,keterangan
+harga_cabai_merah,Harga aktual hari ini (referensi)
+target_h1,Prediksi H+1 (besok)
+target_h3,Prediksi H+3 (3 hari ke depan)
+target_h7,Prediksi H+7 (7 hari ke depan)

@@ -1,6 +1,6 @@
 =======================================================
-  PREPROCESSING DATA HARGA CABAI - KOTA PADANG v3
-  (dengan seleksi fitur otomatis)
+  PREPROCESSING DATA HARGA CABAI - KOTA PADANG v5
+  (ffill causal | median-train | RobustScaler | multi-horizon)
 =======================================================
 
 [1] Memuat data cuaca BMKG...
@@ -25,8 +25,8 @@
     + laporan_iklim_harian-260412124217.xlsx: 31 baris
     + laporan_iklim_harian-260412124226.xlsx: 30 baris
     + laporan_iklim_harian-260412124241.xlsx: 31 baris
-    -> Missing sebelum interpolasi : {'suhu_rata': 32, 'kelembaban': 32, 'curah_hujan': 55, 'lama_penyinaran': 32, 'kec_angin': 31}
-    -> Missing setelah interpolasi : {'suhu_rata': 0, 'kelembaban': 0, 'curah_hujan': 0, 'lama_penyinaran': 0, 'kec_angin': 0}
+    -> Missing sebelum imputasi (ffill) : {'suhu_rata': 32, 'kelembaban': 32, 'curah_hujan': 55, 'lama_penyinaran': 32, 'kec_angin': 31}
+    -> Missing setelah imputasi   : {'suhu_rata': 0, 'kelembaban': 0, 'curah_hujan': 0, 'lama_penyinaran': 0, 'kec_angin': 0}
     -> Shape final : (610, 6)
     -> Rentang     : 2024-05-01 s/d 2025-12-31
 
@@ -39,8 +39,8 @@
     + Tabel Harga Berdasarkan Daerah 2026.xlsx
     ! Outlier 'harga_cabai_merah': 7 nilai di luar [-2,094, 98,156] -> diganti NaN
     ! Outlier 'harga_cabai_rawit': 28 nilai di luar [5,625, 74,625] -> diganti NaN
-    -> Interpolasi 'harga_cabai_merah': 489 hari kosong diisi
-    -> Interpolasi 'harga_cabai_rawit': 510 hari kosong diisi
+    -> ffill 'harga_cabai_merah': 489 hari libur/weekend diisi harga terakhir
+    -> ffill 'harga_cabai_rawit': 510 hari libur/weekend diisi harga terakhir
     -> Shape final : (1566, 3)
     -> Rentang     : 2022-01-03 s/d 2026-04-17
 
@@ -62,11 +62,12 @@
     -> Hari libur ditandai  : 116 hari
 
 [5] Feature engineering (v2 — fitur selektif)...
-    -> Total fitur dibuat : 33
+    -> Total fitur dibuat : 39
+    -> Kolom target multi-horizon: target_h1, target_h3, target_h7
 
 [6] Final cleaning & validasi...
     -> Baris dihapus (warm-up) : 30
-    -> Shape final             : (1536, 35)
+    -> Shape final             : (1536, 41)
     -> Total missing values    : 0
     -> Nilai target <= 0       : 0
 
@@ -74,36 +75,40 @@
   RINGKASAN DATASET FINAL
 =======================================================
   Jumlah baris    : 1,536
-  Jumlah kolom    : 35
+  Jumlah kolom    : 41
   Rentang tanggal : 2022-02-02 -> 2026-04-17
   Harga Cabai Merah:
     Min  : Rp     22,000
     Max  : Rp     97,250
-    Mean : Rp     48,921
-    Std  : Rp     18,313
+    Mean : Rp     48,865
+    Std  : Rp     18,302
   Harga Cabai Rawit:
     Min  : Rp     19,000
     Max  : Rp     74,500
-    Mean : Rp     41,184
+    Mean : Rp     41,417
 =======================================================
+
+[5C] Kandidat fitur sebelum seleksi: 35 fitur
 
 [5B] Seleksi fitur otomatis...
     ! Hapus fitur hampir konstan (std < 0.01): ['is_pra_lebaran', 'is_pasca_lebaran']
     ! Hapus fitur korelasi tinggi (r > 0.95): ['bulan', 'lag_14', 'roll_mean_7']
-    -> Fitur sebelum seleksi : 29
+    -> Fitur sebelum seleksi : 35
     -> Fitur dihapus         : 5 fitur
-    -> Fitur setelah seleksi : 24 fitur
-    -> Fitur final           : ['suhu_rata', 'curah_hujan', 'is_libur_nasional', 'kuartal', 'is_weekend', 'is_awal_bulan', 'bulan_sin', 'bulan_cos', 'is_lebaran', 'is_natal_tahunbaru', 'is_musim_panen', 'lag_1', 'lag_7', 'lag_30', 'rawit_lag_1', 'rawit_lag_7', 'roll_std_7', 'roll_mean_30', 'roll_std_30', 'momentum_7', 'rasio_tren_7_30', 'volatilitas_14', 'roll_hujan_30', 'is_hari_hujan']
+    -> Fitur setelah seleksi : 30 fitur
+    -> Fitur final           : ['suhu_rata', 'kelembaban', 'curah_hujan', 'lama_penyinaran', 'kec_angin', 'is_libur_nasional', 'kuartal', 'is_weekend', 'is_awal_bulan', 'bulan_sin', 'bulan_cos', 'is_lebaran', 'is_natal_tahunbaru', 'is_musim_panen', 'lag_1', 'lag_7', 'lag_30', 'rawit_lag_1', 'rawit_lag_7', 'roll_std_7', 'roll_mean_30', 'roll_std_30', 'momentum_7', 'rasio_tren_7_30', 'volatilitas_14', 'roll_hujan_30', 'is_hari_hujan', 'selisih_harga_1', 'selisih_harga_7', 'is_pasca_covid']
 
-[7] Normalisasi fitur (MinMaxScaler)...
-    -> Jumlah fitur dinormalisasi : 24
-    -> Total kolom output         : 27 (tanggal + 24 fitur + target)
-    -> Scaler disimpan ke         : C:\TUGA STUGAS\semester 6\APM\Project_APM\Backend\machine learning\model XGBoost\scaler.pkl
-    -> Range setelah scaling      : min=0.000, max=1.661
+[7] Normalisasi fitur (RobustScaler — tahan price shock)...
+    -> Fitur dinormalisasi        : 30
+    -> Target disimpan (asli Rp) : ['harga_cabai_merah', 'target_h1', 'target_h3', 'target_h7']
+    -> Total kolom output         : 36
+    -> Scaler disimpan ke         : C:\Data Afiq\Tugas\APM\Project TB APM\Backend\machine_learning\output\xgboost_models\scaler.pkl
+    -> Median fitur (center)      : min=-0.0, max=43670.8
 
 [8] Menyimpan semua output...
-    + dataset_preprocessed.csv  (1,536 baris, 35 kolom, nilai asli)
-    + dataset_scaled.csv        (1,536 baris, 27 kolom, nilai [0,1])
-    + train.csv  (1,228 baris, 27 kolom, s/d 2025-06-13)
-    + test.csv   (308 baris, 27 kolom, mulai 2025-06-14)
-    + info_fitur.csv     (24 fitur setelah seleksi)
+    + dataset_preprocessed.csv  (1,536 baris, 41 kolom, nilai asli)
+    + train.csv  (1,228 baris, s/d 2025-06-13)
+    + test.csv   (308 baris, mulai 2025-06-14)
+    + Baris dibuang (target_h7 NaN): 0
+    + info_fitur.csv     (30 fitur setelah seleksi)
+    + info_target.csv    (4 target)

@@ -1,1 +1,31 @@
 Backend/venv/
+
+# ── Model files (.pkl tidak di-commit) ───────────────────────────────────────
+# MODEL_DIR: machine_learning/output/xgboost_models/ (lokasi resmi .pkl)
+Backend/machine_learning/output/xgboost_models/*.pkl
+Backend/machine_learning/output/xgboost_models/scaler.pkl
+Backend/machine_learning/output/xgboost_models/best_params.json
+
+# ── Output lainnya ────────────────────────────────────────────────────────────
+Backend/machine_learning/output/expanding_window/
+Backend/machine_learning/output/eda/
+Backend/machine_learning/output/xgboost_metrics/
+Backend/machine_learning/output/xgboost_plots/
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

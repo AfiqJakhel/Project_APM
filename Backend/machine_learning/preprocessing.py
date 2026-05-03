@@ -5,24 +5,26 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import RobustScaler
 
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # KONFIGURASI PATH
 # ─────────────────────────────────────────────────────────────────────────────
-BASE_DIR   = Path(__file__).resolve().parent.parent
-DATA_DIR   = BASE_DIR / "data"
-CUACA_DIR  = DATA_DIR / "cuaca"
-HARGA_DIR  = DATA_DIR / "harga_cabai"
-LIBUR_DIR  = DATA_DIR / "hari_libur"
-OUTPUT_DIR = BASE_DIR / "App" / "Output"
-MODEL_DIR  = BASE_DIR / "machine learning" / "model XGBoost"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+CUACA_DIR = DATA_DIR / "raw" / "cuaca"
+HARGA_DIR = DATA_DIR / "raw" / "harga_cabai"
+LIBUR_DIR = DATA_DIR / "raw" / "hari_libur"
+OUTPUT_DIR = DATA_DIR / "processed"
+MODEL_DIR = BASE_DIR / "machine_learning" / "output" / "xgboost_models"
+# MODEL_DIR: machine_learning/output/xgboost_models/ (lokasi resmi .pkl)
+# Jangan simpan .pkl di machine_learning/models/ — folder tersebut sudah dihapus
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-TARGET    = "harga_cabai_merah"
+TARGET = "harga_cabai_merah"
 LOG_LINES = []
 
 
@@ -58,7 +60,7 @@ def load_cuaca() -> pd.DataFrame:
 
             df = pd.read_excel(fp, header=header_idx)
             df.columns = [str(c).strip().upper() for c in df.columns]
-            needed    = ["TANGGAL", "TAVG", "RH_AVG", "RR", "SS", "FF_AVG"]
+            needed = ["TANGGAL", "TAVG", "RH_AVG", "RR", "SS", "FF_AVG"]
             available = [c for c in needed if c in df.columns]
             df = df[available].copy()
             df = df[df["TANGGAL"].astype(str).str.match(r"\d{2}-\d{2}-\d{4}")]
@@ -72,14 +74,26 @@ def load_cuaca() -> pd.DataFrame:
 
     df = pd.concat(frames, ignore_index=True)
     df["TANGGAL"] = pd.to_datetime(df["TANGGAL"], format="%d-%m-%Y", errors="coerce")
-    df.rename(columns={
-        "TANGGAL": "tanggal", "TAVG": "suhu_rata",
-        "RH_AVG": "kelembaban", "RR": "curah_hujan",
-        "SS": "lama_penyinaran", "FF_AVG": "kec_angin"
-    }, inplace=True)
+    df.rename(
+        columns={
+            "TANGGAL": "tanggal",
+            "TAVG": "suhu_rata",
+            "RH_AVG": "kelembaban",
+            "RR": "curah_hujan",
+            "SS": "lama_penyinaran",
+            "FF_AVG": "kec_angin",
+        },
+        inplace=True,
+    )
     df.dropna(subset=["tanggal"], inplace=True)
 
-    numeric_cols = ["suhu_rata", "kelembaban", "curah_hujan", "lama_penyinaran", "kec_angin"]
+    numeric_cols = [
+        "suhu_rata",
+        "kelembaban",
+        "curah_hujan",
+        "lama_penyinaran",
+        "kec_angin",
+    ]
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -93,14 +107,21 @@ def load_cuaca() -> pd.DataFrame:
     date_range = pd.date_range(df["tanggal"].min(), df["tanggal"].max(), freq="D")
     df = df.set_index("tanggal").reindex(date_range).reset_index()
     df.rename(columns={"index": "tanggal"}, inplace=True)
+    # PERBAIKAN LEAKAGE 1: Ganti interpolate(linear) → ffill murni
+    # Alasan: interpolasi linear membutuhkan nilai t+1 untuk mengisi t (bocor ke depan).
+    # ffill = "cuaca hari ini = cuaca terakhir yang tercatat" → kausal 100%.
     for col in numeric_cols:
         if col in df.columns:
-            df[col] = df[col].interpolate(method="linear").ffill().bfill()
+            df[col] = df[col].ffill().bfill()
 
-    log(f"    -> Missing sebelum interpolasi : {miss_before}")
-    log(f"    -> Missing setelah interpolasi : {df[numeric_cols].isna().sum().to_dict()}")
+    log(f"    -> Missing sebelum imputasi (ffill) : {miss_before}")
+    log(
+        f"    -> Missing setelah imputasi   : {df[numeric_cols].isna().sum().to_dict()}"
+    )
     log(f"    -> Shape final : {df.shape}")
-    log(f"    -> Rentang     : {df['tanggal'].min().date()} s/d {df['tanggal'].max().date()}")
+    log(
+        f"    -> Rentang     : {df['tanggal'].min().date()} s/d {df['tanggal'].max().date()}"
+    )
     return df
 
 
@@ -148,10 +169,15 @@ def load_harga_cabai() -> pd.DataFrame:
                 records = []
                 for col in date_cols:
                     val = str(row[col]).strip()
-                    harga = np.nan if val in ["-", "nan", "", "None"] else \
-                        float(val.replace(",", "").replace(".", ""))
+                    harga = (
+                        np.nan
+                        if val in ["-", "nan", "", "None"]
+                        else float(val.replace(",", "").replace(".", ""))
+                    )
                     try:
-                        tgl = pd.to_datetime(str(col).strip(), dayfirst=True, errors="coerce")
+                        tgl = pd.to_datetime(
+                            str(col).strip(), dayfirst=True, errors="coerce"
+                        )
                     except Exception:
                         tgl = pd.NaT
                     if pd.notna(tgl):
@@ -181,12 +207,14 @@ def load_harga_cabai() -> pd.DataFrame:
         if col not in df.columns:
             continue
         Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
-        IQR    = Q3 - Q1
+        IQR = Q3 - Q1
         lower, upper = Q1 - 1.5 * IQR, Q3 + 1.5 * IQR
         outliers = ((df[col] < lower) | (df[col] > upper)).sum()
         if outliers > 0:
-            log(f"    ! Outlier '{col}': {outliers} nilai di luar "
-                f"[{lower:,.0f}, {upper:,.0f}] -> diganti NaN")
+            log(
+                f"    ! Outlier '{col}': {outliers} nilai di luar "
+                f"[{lower:,.0f}, {upper:,.0f}] -> diganti NaN"
+            )
             df.loc[(df[col] < lower) | (df[col] > upper), col] = np.nan
 
     date_range = pd.date_range(df["tanggal"].min(), df["tanggal"].max(), freq="D")
@@ -194,12 +222,19 @@ def load_harga_cabai() -> pd.DataFrame:
     for col in harga_cols:
         if col in df_indexed.columns:
             n_miss = df_indexed[col].isna().sum()
-            df_indexed[col] = df_indexed[col].interpolate(method="time").ffill().bfill()
-            log(f"    -> Interpolasi '{col}': {n_miss} hari kosong diisi")
+            # PERBAIKAN 1: Gunakan ffill (bukan interpolate) untuk hari libur/weekend
+            # Alasan: pasar tutup di hari libur → harga tidak bergerak,
+            # bukan naik/turun bertahap. ffill = "harga tetap seperti hari kerja terakhir"
+            df_indexed[col] = df_indexed[col].ffill().bfill()
+            log(
+                f"    -> ffill '{col}': {n_miss} hari libur/weekend diisi harga terakhir"
+            )
     df = df_indexed.reset_index().rename(columns={"index": "tanggal"})
 
     log(f"    -> Shape final : {df.shape}")
-    log(f"    -> Rentang     : {df['tanggal'].min().date()} s/d {df['tanggal'].max().date()}")
+    log(
+        f"    -> Rentang     : {df['tanggal'].min().date()} s/d {df['tanggal'].max().date()}"
+    )
     return df
 
 
@@ -222,10 +257,9 @@ def load_hari_libur() -> pd.DataFrame:
             for item in data:
                 tgl = pd.to_datetime(item.get("tanggal", ""), errors="coerce")
                 if pd.notna(tgl):
-                    records.append({
-                        "tanggal": tgl,
-                        "keterangan_libur": item.get("keterangan", "")
-                    })
+                    records.append(
+                        {"tanggal": tgl, "keterangan_libur": item.get("keterangan", "")}
+                    )
             log(f"    + {Path(fp).name}: {len(data)} hari libur")
         except Exception as e:
             log(f"    x {Path(fp).name}: {e}")
@@ -280,35 +314,39 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     log("\n[5] Feature engineering (v2 — fitur selektif)...")
 
     # ── A. Kalender (hanya yang informatif untuk harga komoditas) ──────────
-    df["bulan"]          = df["tanggal"].dt.month
-    df["kuartal"]        = df["tanggal"].dt.quarter
-    df["is_weekend"]     = (df["tanggal"].dt.dayofweek >= 5).astype(int)
-    df["is_awal_bulan"]  = (df["tanggal"].dt.day <= 7).astype(int)
+    df["bulan"] = df["tanggal"].dt.month
+    df["kuartal"] = df["tanggal"].dt.quarter
+    df["is_weekend"] = (df["tanggal"].dt.dayofweek >= 5).astype(int)
+    df["is_awal_bulan"] = (df["tanggal"].dt.day <= 7).astype(int)
     # Enkode siklus bulanan dengan sin/cos (menggantikan bulan mentah)
-    df["bulan_sin"]      = np.sin(2 * np.pi * df["bulan"] / 12)
-    df["bulan_cos"]      = np.cos(2 * np.pi * df["bulan"] / 12)
+    df["bulan_sin"] = np.sin(2 * np.pi * df["bulan"] / 12)
+    df["bulan_cos"] = np.cos(2 * np.pi * df["bulan"] / 12)
     # Catatan: tahun, hari_bulan, hari_minggu, hari_sin/cos, hari_dlm_tahun,
     #          minggu_ke dihapus — tidak berpola signifikan untuk harga cabai
 
     # ── B. Event khusus (dipertahankan semua — domain knowledge kuat) ──────
-    lebaran = pd.to_datetime([
-        "2022-05-02", "2023-04-22", "2024-04-10",
-        "2025-03-30", "2026-03-20"
-    ])
-    df["is_pra_lebaran"]   = 0
-    df["is_lebaran"]       = 0
+    lebaran = pd.to_datetime(
+        ["2022-05-02", "2023-04-22", "2024-04-10", "2025-03-30", "2026-03-20"]
+    )
+    df["is_pra_lebaran"] = 0
+    df["is_lebaran"] = 0
     df["is_pasca_lebaran"] = 0
     for d in lebaran:
-        df.loc[(df["tanggal"] >= d - pd.Timedelta(14)) & (df["tanggal"] < d),
-               "is_pra_lebaran"] = 1
-        df.loc[(df["tanggal"] >= d) & (df["tanggal"] <= d + pd.Timedelta(2)),
-               "is_lebaran"] = 1
-        df.loc[(df["tanggal"] > d + pd.Timedelta(2)) &
-               (df["tanggal"] <= d + pd.Timedelta(9)),
-               "is_pasca_lebaran"] = 1
+        df.loc[
+            (df["tanggal"] >= d - pd.Timedelta(14)) & (df["tanggal"] < d),
+            "is_pra_lebaran",
+        ] = 1
+        df.loc[
+            (df["tanggal"] >= d) & (df["tanggal"] <= d + pd.Timedelta(2)), "is_lebaran"
+        ] = 1
+        df.loc[
+            (df["tanggal"] > d + pd.Timedelta(2))
+            & (df["tanggal"] <= d + pd.Timedelta(9)),
+            "is_pasca_lebaran",
+        ] = 1
     df["is_natal_tahunbaru"] = (
-        ((df["bulan"] == 12) & (df["tanggal"].dt.day >= 20)) |
-        ((df["bulan"] == 1)  & (df["tanggal"].dt.day <= 7))
+        ((df["bulan"] == 12) & (df["tanggal"].dt.day >= 20))
+        | ((df["bulan"] == 1) & (df["tanggal"].dt.day <= 7))
     ).astype(int)
     df["is_musim_panen"] = df["bulan"].isin([5, 6, 7, 11, 12, 1]).astype(int)
 
@@ -329,7 +367,7 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     for w in [7, 30]:
         s = df[TARGET].shift(1)
         df[f"roll_mean_{w}"] = s.rolling(w).mean()
-        df[f"roll_std_{w}"]  = s.rolling(w).std()
+        df[f"roll_std_{w}"] = s.rolling(w).std()
 
     # ── E. Momentum (hanya jangka pendek) ─────────────────────────────────
     # momentum_30 dan pct_change di-drop: berkorelasi tinggi dengan momentum_7
@@ -343,7 +381,7 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
     # Koefisien variasi 14 hari: proxy ketidakstabilan / gejolak harga
     roll14_mean = df[TARGET].shift(1).rolling(14).mean().replace(0, np.nan)
-    roll14_std  = df[TARGET].shift(1).rolling(14).std()
+    roll14_std = df[TARGET].shift(1).rolling(14).std()
     df["volatilitas_14"] = (roll14_std / roll14_mean).fillna(0)
 
     # ── G. Cuaca (hanya fitur utama + akumulasi hujan jangka panjang) ─────
@@ -355,7 +393,28 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
         df["is_hari_hujan"] = (df["curah_hujan"] > 1.0).astype(int)
     # suhu_rata dan curah_hujan dipertahankan langsung dari merge
 
+    # ── H. Diferensiasi harga (PERBAIKAN 4) ──────────────────────────────
+    # Menangkap "fluktuasi" secara eksplisit sesuai judul penelitian.
+    # diff(n) = harga_hari_ini - harga_n_hari_lalu
+    # Ini berbeda dengan momentum_7 yang menggunakan shift(1) sebagai basis
+    df["selisih_harga_1"] = df[TARGET].diff(1)  # perubahan harian
+    df["selisih_harga_7"] = df[TARGET].diff(7)  # perubahan mingguan
+
+    # ── I. Fitur konteks historis (PERBAIKAN 4) ───────────────────────────
+    # Tahun 2022 = masa pemulihan pasca-COVID, pola harga sangat tidak normal
+    # Model perlu "diberitahu" bahwa data 2022 memiliki karakter berbeda
+    df["is_pasca_covid"] = (df["tanggal"].dt.year == 2022).astype(int)
+
+    # ── J. Target multi-horizon (PERBAIKAN 3) ─────────────────────────────
+    # Membuat kolom target untuk prediksi H+1, H+3, H+7
+    # shift(-n) = ambil nilai n hari ke depan sebagai target
+    # Kolom ini TIDAK dimasukkan ke feature_cols, hanya dipakai saat training
+    df["target_h1"] = df[TARGET].shift(-1)  # prediksi besok
+    df["target_h3"] = df[TARGET].shift(-3)  # prediksi 3 hari ke depan
+    df["target_h7"] = df[TARGET].shift(-7)  # prediksi 7 hari ke depan
+
     log(f"    -> Total fitur dibuat : {df.shape[1] - 2}")
+    log(f"    -> Kolom target multi-horizon: target_h1, target_h3, target_h7")
     return df
 
 
@@ -424,20 +483,31 @@ def final_cleaning(df: pd.DataFrame) -> pd.DataFrame:
     lag_cols = [c for c in df.columns if c.startswith("lag_")]
     df.dropna(subset=lag_cols, inplace=True)
 
-    # Isi NaN sisa pada cuaca dengan forward/backward fill
-    cuaca_cols = ["suhu_rata", "curah_hujan"]
+    # PERBAIKAN 5: cuaca_cols diperlengkap — semua kolom cuaca mentah di-ffill
+    # sebelumnya hanya suhu_rata dan curah_hujan, sisanya bisa lolos NaN
+    cuaca_cols = [
+        "suhu_rata",
+        "kelembaban",
+        "curah_hujan",
+        "lama_penyinaran",
+        "kec_angin",
+    ]
     for col in cuaca_cols:
         if col in df.columns:
             df[col] = df[col].ffill().bfill()
 
-    # Isi NaN numerik lain dengan median
+    # PERBAIKAN LEAKAGE 2: Imputasi median hanya dari bagian train (80% pertama)
+    # Alasan: median global menyertakan distribusi data test → bocor ke depan.
+    # Solusi: hitung median dari df_train saja, terapkan ke seluruh dataset.
+    split_idx_clean = int(len(df) * 0.8)
     for col in df.select_dtypes(include=[np.number]).columns:
         if df[col].isna().any():
-            df[col] = df[col].fillna(df[col].median())
+            median_train = df.iloc[:split_idx_clean][col].median()
+            df[col] = df[col].fillna(median_train)
 
     df.reset_index(drop=True, inplace=True)
 
-    total_missing    = df.isna().sum().sum()
+    total_missing = df.isna().sum().sum()
     n_negatif_target = (df[TARGET] <= 0).sum()
 
     log(f"    -> Baris dihapus (warm-up) : {n_awal - len(df)}")
@@ -455,7 +525,9 @@ def final_cleaning(df: pd.DataFrame) -> pd.DataFrame:
     log("=" * 55)
     log(f"  Jumlah baris    : {len(df):,}")
     log(f"  Jumlah kolom    : {df.shape[1]}")
-    log(f"  Rentang tanggal : {df['tanggal'].min().date()} -> {df['tanggal'].max().date()}")
+    log(
+        f"  Rentang tanggal : {df['tanggal'].min().date()} -> {df['tanggal'].max().date()}"
+    )
     log(f"  Harga Cabai Merah:")
     log(f"    Min  : Rp {df[TARGET].min():>10,.0f}")
     log(f"    Max  : Rp {df[TARGET].max():>10,.0f}")
@@ -473,24 +545,27 @@ def final_cleaning(df: pd.DataFrame) -> pd.DataFrame:
 # =============================================================================
 # BAGIAN 7 — NORMALISASI (MinMaxScaler)
 # =============================================================================
-def normalisasi(df: pd.DataFrame, feature_cols: list):
+def normalisasi(df: pd.DataFrame, feature_cols: list, target_cols: list):
     """
-    Normalisasi fitur ke [0,1] menggunakan MinMaxScaler.
+    Normalisasi fitur menggunakan RobustScaler (median + IQR).
+    RobustScaler dipilih karena:
+      - Tahan terhadap price shock / outlier harga komoditas
+      - MinMaxScaler rentan: lonjakan harga baru akan menghasilkan nilai > 1.0
     Scaler di-fit HANYA pada data train untuk mencegah data leakage.
-    df_scaled yang dikembalikan HANYA berisi kolom terpilih saja
-    (tanggal + feature_cols + TARGET), bukan semua kolom df.
+    target_cols (target_h1, h3, h7) ikut disimpan tapi TIDAK dinormalisasi
+    karena nilainya harus tetap dalam satuan Rupiah untuk evaluasi model.
     """
-    log("\n[7] Normalisasi fitur (MinMaxScaler)...")
+    log("\n[7] Normalisasi fitur (RobustScaler — tahan price shock)...")
 
     split_idx = int(len(df) * 0.8)
-    df_train  = df.iloc[:split_idx]
+    df_train = df.iloc[:split_idx]
 
-    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaler = RobustScaler()
     scaler.fit(df_train[feature_cols])
 
-    # Bangun df_scaled hanya dari kolom yang benar-benar dipakai
-    # Ini yang menjamin train.csv & test.csv tidak punya kolom sisa
-    keep_cols = ["tanggal"] + feature_cols + [TARGET]
+    # Kolom yang disimpan: tanggal + fitur + target utama + target multi-horizon
+    # + rawit sebagai referensi (tidak dinormalisasi)
+    keep_cols = ["tanggal"] + feature_cols + [TARGET] + target_cols
     if "harga_cabai_rawit" in df.columns:
         keep_cols.append("harga_cabai_rawit")
 
@@ -500,56 +575,87 @@ def normalisasi(df: pd.DataFrame, feature_cols: list):
     scaler_path = MODEL_DIR / "scaler.pkl"
     joblib.dump(scaler, scaler_path)
 
-    log(f"    -> Jumlah fitur dinormalisasi : {len(feature_cols)}")
-    log(f"    -> Total kolom output         : {df_scaled.shape[1]} "
-        f"(tanggal + {len(feature_cols)} fitur + target)")
+    log(f"    -> Fitur dinormalisasi        : {len(feature_cols)}")
+    log(f"    -> Target disimpan (asli Rp) : {[TARGET] + target_cols}")
+    log(f"    -> Total kolom output         : {df_scaled.shape[1]}")
     log(f"    -> Scaler disimpan ke         : {scaler_path}")
-    log(f"    -> Range setelah scaling      : "
-        f"min={df_scaled[feature_cols].min().min():.3f}, "
-        f"max={df_scaled[feature_cols].max().max():.3f}")
+    log(
+        f"    -> Median fitur (center)      : min={df_train[feature_cols].median().min():.1f}, "
+        f"max={df_train[feature_cols].median().max():.1f}"
+    )
     return df_scaled, scaler, feature_cols
 
 
 # =============================================================================
 # BAGIAN 8 — SIMPAN OUTPUT
 # =============================================================================
-def simpan_output(df_asli: pd.DataFrame, df_scaled: pd.DataFrame, feature_cols: list):
+def simpan_output(
+    df_asli: pd.DataFrame,
+    df_scaled: pd.DataFrame,
+    feature_cols: list,
+    target_cols: list,
+):
     log("\n[8] Menyimpan semua output...")
 
     split_idx = int(len(df_asli) * 0.8)
 
     # Dataset asli — simpan semua kolom untuk keperluan EDA & analisis
     df_asli.to_csv(OUTPUT_DIR / "dataset_preprocessed.csv", index=False)
-    log(f"    + dataset_preprocessed.csv  ({len(df_asli):,} baris, "
-        f"{df_asli.shape[1]} kolom, nilai asli)")
+    log(
+        f"    + dataset_preprocessed.csv  ({len(df_asli):,} baris, "
+        f"{df_asli.shape[1]} kolom, nilai asli)"
+    )
 
-    # Dataset scaled — df_scaled sudah difilter di normalisasi(), langsung simpan
-    df_scaled.to_csv(OUTPUT_DIR / "dataset_scaled.csv", index=False)
-    log(f"    + dataset_scaled.csv        ({len(df_scaled):,} baris, "
-        f"{df_scaled.shape[1]} kolom, nilai [0,1])")
+    # Train & test split — dari df_scaled
+    # Baris paling akhir yang tidak punya target_h7 (7 hari terakhir) dibuang
+    df_for_split = df_scaled.dropna(subset=target_cols).reset_index(drop=True)
+    split_idx2 = int(len(df_for_split) * 0.8)
 
-    # Train & test split — dari df_scaled yang sudah bersih
-    df_train_out = df_scaled.iloc[:split_idx].reset_index(drop=True)
-    df_test_out  = df_scaled.iloc[split_idx:].reset_index(drop=True)
+    df_train_out = df_for_split.iloc[:split_idx2].reset_index(drop=True)
+    df_test_out = df_for_split.iloc[split_idx2:].reset_index(drop=True)
     df_train_out.to_csv(OUTPUT_DIR / "train.csv", index=False)
-    df_test_out.to_csv(OUTPUT_DIR  / "test.csv",  index=False)
-    log(f"    + train.csv  ({len(df_train_out):,} baris, {df_train_out.shape[1]} kolom, "
-        f"s/d {df_train_out.iloc[-1]['tanggal'].date()})")
-    log(f"    + test.csv   ({len(df_test_out):,} baris, {df_test_out.shape[1]} kolom, "
-        f"mulai {df_test_out.iloc[0]['tanggal'].date()})")
+    df_test_out.to_csv(OUTPUT_DIR / "test.csv", index=False)
+    log(
+        f"    + train.csv  ({len(df_train_out):,} baris, "
+        f"s/d {df_train_out.iloc[-1]['tanggal'].date()})"
+    )
+    log(
+        f"    + test.csv   ({len(df_test_out):,} baris, "
+        f"mulai {df_test_out.iloc[0]['tanggal'].date()})"
+    )
+    log(
+        f"    + Baris dibuang (target_h7 NaN): " f"{len(df_scaled) - len(df_for_split)}"
+    )
 
-    # Info fitur (dari nilai asli, bukan scaled)
-    info = pd.DataFrame({
-        "fitur"     : feature_cols,
-        "tipe"      : [str(df_asli[c].dtype) for c in feature_cols],
-        "null_count": [int(df_asli[c].isna().sum()) for c in feature_cols],
-        "min_asli"  : [round(df_asli[c].min(), 2) for c in feature_cols],
-        "max_asli"  : [round(df_asli[c].max(), 2) for c in feature_cols],
-        "mean_asli" : [round(df_asli[c].mean(), 2) for c in feature_cols],
-        "std_asli"  : [round(df_asli[c].std(), 2) for c in feature_cols],
-    })
+    # Info fitur lengkap (dari nilai asli)
+    info = pd.DataFrame(
+        {
+            "fitur": feature_cols,
+            "tipe": [str(df_asli[c].dtype) for c in feature_cols],
+            "null_count": [int(df_asli[c].isna().sum()) for c in feature_cols],
+            "min_asli": [round(df_asli[c].min(), 2) for c in feature_cols],
+            "max_asli": [round(df_asli[c].max(), 2) for c in feature_cols],
+            "mean_asli": [round(df_asli[c].mean(), 2) for c in feature_cols],
+            "std_asli": [round(df_asli[c].std(), 2) for c in feature_cols],
+        }
+    )
     info.to_csv(OUTPUT_DIR / "info_fitur.csv", index=False)
     log(f"    + info_fitur.csv     ({len(feature_cols)} fitur setelah seleksi)")
+
+    # Daftar target multi-horizon untuk referensi train.py
+    target_info = pd.DataFrame(
+        {
+            "target": [TARGET] + target_cols,
+            "keterangan": [
+                "Harga aktual hari ini (referensi)",
+                "Prediksi H+1 (besok)",
+                "Prediksi H+3 (3 hari ke depan)",
+                "Prediksi H+7 (7 hari ke depan)",
+            ],
+        }
+    )
+    target_info.to_csv(OUTPUT_DIR / "info_target.csv", index=False)
+    log(f"    + info_target.csv    ({len(target_info)} target)")
 
     laporan_path = OUTPUT_DIR / "laporan_preprocessing.txt"
     with open(laporan_path, "w", encoding="utf-8") as f:
@@ -565,15 +671,15 @@ def simpan_output(df_asli: pd.DataFrame, df_scaled: pd.DataFrame, feature_cols: 
 # =============================================================================
 def main():
     log("=" * 55)
-    log("  PREPROCESSING DATA HARGA CABAI - KOTA PADANG v3")
-    log("  (dengan seleksi fitur otomatis)")
+    log("  PREPROCESSING DATA HARGA CABAI - KOTA PADANG v5")
+    log("  (ffill causal | median-train | RobustScaler | multi-horizon)")
     log("=" * 55)
 
     errors = []
     for label, path in [
         ("cuaca", CUACA_DIR),
         ("harga_cabai", HARGA_DIR),
-        ("hari_libur", LIBUR_DIR)
+        ("hari_libur", LIBUR_DIR),
     ]:
         if not path.exists():
             errors.append(f"Folder tidak ada: {path}")
@@ -582,30 +688,37 @@ def main():
             log(f"  x {e}")
         return None, None, None
 
-    df_cuaca  = load_cuaca()
-    df_harga  = load_harga_cabai()
-    df_libur  = load_hari_libur()
+    df_cuaca = load_cuaca()
+    df_harga = load_harga_cabai()
+    df_libur = load_hari_libur()
     df_merged = merge_data(df_harga, df_cuaca, df_libur)
-    df_feat   = feature_engineering(df_merged)
-    df_final  = final_cleaning(df_feat)
+    df_feat = feature_engineering(df_merged)
+    df_final = final_cleaning(df_feat)
 
-    # Tentukan kandidat fitur sebelum seleksi
-    exclude      = ["tanggal", TARGET, "harga_cabai_rawit",
-                    "kelembaban", "kec_angin", "lama_penyinaran"]
-    feature_cols = [c for c in df_final.columns
-                    if c not in exclude and pd.api.types.is_numeric_dtype(df_final[c])]
+    # PERBAIKAN 2: Hapus hardcode exclude cuaca — biarkan seleksi_fitur()
+    # yang memutuskan mana yang redundan berdasarkan data aktual.
+    TARGET_COLS = ["target_h1", "target_h3", "target_h7"]
+    exclude = ["tanggal", TARGET, "harga_cabai_rawit"] + TARGET_COLS
+    feature_cols = [
+        c
+        for c in df_final.columns
+        if c not in exclude and pd.api.types.is_numeric_dtype(df_final[c])
+    ]
+
+    log(f"\n[5C] Kandidat fitur sebelum seleksi: {len(feature_cols)} fitur")
 
     # Seleksi fitur otomatis (hapus redundan & berkorelasi tinggi)
     feature_cols = seleksi_fitur(df_final, feature_cols)
 
-    df_scaled, scaler, feature_cols = normalisasi(df_final, feature_cols)
-    simpan_output(df_final, df_scaled, feature_cols)
+    df_scaled, scaler, feature_cols = normalisasi(df_final, feature_cols, TARGET_COLS)
+    simpan_output(df_final, df_scaled, feature_cols, TARGET_COLS)
 
-    log("\n[SELESAI] Preprocessing v3 berhasil!")
-    log(f"  Target   : {TARGET}")
-    log(f"  Fitur    : {len(feature_cols)} fitur siap untuk XGBoost")
-    log(f"  Output   : {OUTPUT_DIR}")
-    log(f"  Scaler   : {MODEL_DIR / 'scaler.pkl'}")
+    log("\n[SELESAI] Preprocessing v4 berhasil!")
+    log(f"  Target utama    : {TARGET}")
+    log(f"  Target tambahan : target_h1, target_h3, target_h7")
+    log(f"  Fitur           : {len(feature_cols)} fitur siap untuk XGBoost")
+    log(f"  Output          : {OUTPUT_DIR}")
+    log(f"  Scaler          : {MODEL_DIR / 'scaler.pkl'}")
 
     return df_final, df_scaled, feature_cols
 

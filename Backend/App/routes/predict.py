@@ -120,6 +120,8 @@ async def prediksi_harga_endpoint(req: PrediksiRequest):
             prediksi_harga=round(harga, 2),
             status_harga=status,
             pesan=pesan,
+            arah_prediksi=hasil.get("arah_prediksi"),
+            confidence_arah=hasil.get("confidence_arah"),
         )
 
     except ValueError as e:
@@ -188,6 +190,8 @@ async def prediksi_semua(
                     "status_harga": status,
                     "pesan": pesan,
                     "model_version": data.get("model_version", "unknown"),
+                    "arah_prediksi": data.get("arah_prediksi"),
+                    "confidence_arah": data.get("confidence_arah"),
                 }
 
         return {"tanggal": tanggal, "prediksi": hasil}
@@ -421,6 +425,8 @@ async def prediksi_otomatis(
             "tanggal_prediksi": hasil["tanggal_prediksi"],
             "prediksi_rp": hasil["prediksi_rp"],
             "model_version": hasil["model_version"],
+            "arah_prediksi": hasil.get("arah_prediksi"),
+            "confidence_arah": hasil.get("confidence_arah"),
         }
         
     except HTTPException:
@@ -504,6 +510,8 @@ async def prediksi_semua_otomatis():
                     "tanggal_prediksi": data["tanggal_prediksi"],
                     "prediksi_rp": data["prediksi_rp"],
                     "model_version": data["model_version"],
+                    "arah_prediksi": data.get("arah_prediksi"),
+                    "confidence_arah": data.get("confidence_arah"),
                 })
         
         return {
@@ -522,7 +530,70 @@ async def prediksi_semua_otomatis():
 
 
 # ---------------------------------------------------------------------------
-# ENDPOINT 3 — GET /harga/historis — Data historis untuk grafik
+# ENDPOINT 3 — GET /prediksi/arah/{horizon} — Prediksi khusus arah pergerakan
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/prediksi/arah/{horizon}",
+    summary="Prediksi arah pergerakan harga",
+    response_description="Arah prediksi (naik/turun/stabil) dan confidence"
+)
+async def prediksi_khusus_arah(
+    horizon: str = PathParam(
+        ...,
+        description="Horizon prediksi: h1 (besok), h3 (3 hari), h7 (7 hari)",
+        regex="^(h1|h3|h7)$"
+    )
+):
+    """
+    **Prediksi HANYA arah pergerakan harga cabai.**
+    
+    Endpoint ini khusus digunakan oleh frontend jika hanya ingin
+    mengetahui apakah harga akan naik, turun, atau stabil, tanpa
+    memerlukan prediksi nilai harganya secara spesifik.
+    
+    **Response:**
+    ```json
+    {
+        "status": "success",
+        "horizon": "h1",
+        "arah_prediksi": "naik",
+        "confidence_arah": 85.5
+    }
+    ```
+    """
+    if not predictor.validate_horizon(horizon):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Horizon tidak valid: '{horizon}'. Gunakan 'h1', 'h3', atau 'h7'."
+        )
+    
+    try:
+        # Ambil data terkini otomatis
+        input_data = predictor.get_fitur_terkini()
+        
+        # Kita panggil prediksi_harga karena di dalamnya sudah terintegrasi
+        # pemanggilan prediksi_arah dan ekstraksi fiturnya sama.
+        hasil = await predictor.prediksi_harga(input_data, horizon)
+        
+        return {
+            "status": "success",
+            "horizon": horizon,
+            "arah_prediksi": hasil.get("arah_prediksi"),
+            "confidence_arah": hasil.get("confidence_arah"),
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gagal memprediksi arah: {str(e)}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# ENDPOINT 4 — GET /harga/historis — Data historis untuk grafik
 # ---------------------------------------------------------------------------
 
 @router.get(

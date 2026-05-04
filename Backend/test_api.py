@@ -10,7 +10,11 @@ Usage:
 
 import requests
 import json
+import sys
+import io
 from datetime import datetime
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 BASE_URL = "http://localhost:8000"
 API_PREFIX = "/api/predict"
@@ -69,6 +73,13 @@ def test_prediksi_h7():
     url = f"{BASE_URL}{API_PREFIX}/prediksi/h7"
     response = requests.get(url)
     return print_test("Prediksi H+7", url, response)
+
+
+def test_prediksi_arah():
+    """Test prediksi khusus arah H+1"""
+    url = f"{BASE_URL}{API_PREFIX}/prediksi/arah/h1"
+    response = requests.get(url)
+    return print_test("Prediksi Arah H+1", url, response)
 
 
 def test_prediksi_semua():
@@ -141,6 +152,7 @@ def main():
         ("Prediksi H+1", test_prediksi_h1),
         ("Prediksi H+3", test_prediksi_h3),
         ("Prediksi H+7", test_prediksi_h7),
+        ("Prediksi Arah H+1", test_prediksi_arah),
         ("Prediksi Semua Horizon", test_prediksi_semua),
         ("Data Historis", test_harga_historis),
         ("Metrik Model", test_model_metrik),

@@ -3,3 +3,6 @@ harga_cabai_merah,Harga aktual hari ini (referensi)
 target_h1,Prediksi H+1 (besok)
 target_h3,Prediksi H+3 (3 hari ke depan)
 target_h7,Prediksi H+7 (7 hari ke depan)
+arah_target_h1,"Arah Prediksi H+1 (1=Naik, 0=Turun/Tetap)"
+arah_target_h3,"Arah Prediksi H+3 (1=Naik, 0=Turun/Tetap)"
+arah_target_h7,"Arah Prediksi H+7 (1=Naik, 0=Turun/Tetap)"

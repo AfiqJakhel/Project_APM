@@ -32,16 +32,21 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib
+import sys
+import io
+
+# Fix unicode error on windows
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from pathlib import Path
 from datetime import datetime
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, accuracy_score, precision_score, recall_score, f1_score
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import RobustScaler
-from xgboost import XGBRegressor
+from xgboost import XGBRegressor, XGBClassifier
 
 try:
     import shap
@@ -82,6 +87,7 @@ TARGET_MAP = {
 NON_FEATURE_COLS = [
     "tanggal", "harga_cabai_rawit", TARGET,
     "target_h1", "target_h3", "target_h7",
+    "arah_target_h1", "arah_target_h3", "arah_target_h7"
 ]
 
 LOG_LINES: list = []
@@ -220,7 +226,13 @@ def hitung_da(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Directional Accuracy — % prediksi arah naik/turun yang benar."""
     if len(y_true) < 2:
         return float("nan")
-    return float(np.mean(np.sign(np.diff(y_true)) == np.sign(np.diff(y_pred))) * 100)
+    diff_true = np.diff(y_true)
+    diff_pred = np.diff(y_pred)
+    # Filter sideways: jangan hitung jika harga aktual tidak berubah (stagnan)
+    mask = diff_true != 0
+    if np.sum(mask) == 0:
+        return float("nan")
+    return float(np.mean(np.sign(diff_true[mask]) == np.sign(diff_pred[mask])) * 100)
 
 def hitung_semua_metrik(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
     return {
@@ -687,6 +699,64 @@ def latih_model_final(df: pd.DataFrame, target_col: str,
 
 
 # =============================================================================
+# BAGIAN 11C — MODEL KLASIFIKASI (ARAH PERGERAKAN)
+# =============================================================================
+def latih_model_klasifikasi(df: pd.DataFrame, target_col: str, label: str) -> None:
+    """
+    Melatih model klasifikasi (XGBClassifier) untuk memprediksi arah pergerakan harga.
+    Target: 1 (Naik), 0 (Turun/Tetap).
+    """
+    log(f"\n[11C] Melatih model KLASIFIKASI (Arah Pergerakan) — {label.upper()}...")
+    
+    arah_target_col = f"arah_{target_col}"
+    if arah_target_col not in df.columns:
+        log(f"    ! Kolom target klasifikasi {arah_target_col} tidak ditemukan.")
+        return
+        
+    df_valid = df.dropna(subset=[arah_target_col]).copy()
+    X, y = pisahkan_fitur(df_valid, arah_target_col)
+    
+    # Split train & test (80% train, 20% hold-out untuk evaluasi)
+    split_val = int(len(X) * 0.8)
+    X_tr, X_val = X.iloc[:split_val], X.iloc[split_val:]
+    y_tr, y_val = y.iloc[:split_val], y.iloc[split_val:]
+    
+    model = XGBClassifier(
+        objective="binary:logistic",
+        tree_method="hist",
+        random_state=RANDOM_STATE,
+        verbosity=0,
+        eval_metric="logloss",
+        early_stopping_rounds=30,
+        n_estimators=300,
+        max_depth=5,
+        learning_rate=0.05
+    )
+    model.fit(
+        X_tr, y_tr,
+        eval_set=[(X_tr, y_tr), (X_val, y_val)],
+        verbose=False,
+    )
+    
+    # Evaluasi pada hold-out set
+    y_pred = model.predict(X_val)
+    acc = accuracy_score(y_val, y_pred)
+    prec = precision_score(y_val, y_pred, zero_division=0)
+    rec = recall_score(y_val, y_pred, zero_division=0)
+    f1 = f1_score(y_val, y_pred, zero_division=0)
+    
+    log(f"    -> Accuracy : {acc*100:.2f}%")
+    log(f"    -> Precision: {prec*100:.2f}%")
+    log(f"    -> Recall   : {rec*100:.2f}%")
+    log(f"    -> F1-Score : {f1*100:.2f}%")
+    
+    # Simpan model klasifikasi
+    path = MODEL_DIR / f"model_arah_{label}.pkl"
+    joblib.dump(model, path)
+    log(f"    -> Model klasifikasi {path.name} disimpan.")
+
+
+# =============================================================================
 # BAGIAN 11B — EVALUASI MODEL FINAL (PERBAIKAN 2)
 # =============================================================================
 def evaluasi_model_final(df: pd.DataFrame, target_col: str,
@@ -976,6 +1046,9 @@ def main():
         df_valid = df.dropna(subset=[target_col]).copy()
         X_all, _ = pisahkan_fitur(df_valid, target_col)
         shap_final(model_final, X_all, label)
+
+        # ── PERBAIKAN: Latih model KLASIFIKASI ───────────
+        latih_model_klasifikasi(df, target_col, label)
 
     # ── Laporan ringkasan ─────────────────────────────────────────────────────
     laporan_ringkasan(all_results)

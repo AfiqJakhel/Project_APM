@@ -129,6 +129,31 @@ def load_model(label: str):
         )
 
 
+def load_model_arah(label: str):
+    """
+    Load model XGBClassifier untuk horizon tertentu.
+    """
+    cache_key = f"model_arah_{label}"
+    if cache_key in _CACHE:
+        return _CACHE[cache_key]
+    
+    pattern = f"model_arah_{label}.pkl"
+    model_path = MODEL_DIR / pattern
+    
+    if not model_path.exists():
+        logger.warning(f"Model klasifikasi {label} tidak ditemukan di {MODEL_DIR}")
+        return None
+    
+    try:
+        model = joblib.load(model_path)
+        _CACHE[cache_key] = model
+        logger.info(f"Model klasifikasi {label} berhasil dimuat: {pattern}")
+        return model
+    except Exception as e:
+        logger.error(f"Error loading model klasifikasi {label}: {e}")
+        return None
+
+
 def load_feature_cols(label: str) -> List[str]:
     """
     Load daftar nama kolom fitur untuk horizon tertentu.
@@ -196,6 +221,7 @@ def preload_artifacts():
         load_scaler()
         for label in ["h1", "h3", "h7"]:
             load_model(label)
+            load_model_arah(label)
             load_feature_cols(label)
         logger.info("Preloading ML artifacts berhasil.")
     except Exception as e:
@@ -242,6 +268,44 @@ def get_dataset() -> pd.DataFrame:
 # =============================================================================
 # BAGIAN 2 — FUNGSI PREDIKSI UTAMA
 # =============================================================================
+
+def prediksi_arah(df_input: pd.DataFrame, label: str) -> dict:
+    """
+    Prediksi arah pergerakan harga menggunakan XGBClassifier.
+    Target 1 (Naik), 0 (Turun/Tetap).
+    """
+    model = load_model_arah(label)
+    if not model:
+        return {"arah_prediksi": None, "confidence_arah": None}
+    
+    try:
+        # predict_proba returns probability of class 0 and class 1
+        probs = model.predict_proba(df_input)[0]
+        # Jika hanya 1 class yang ada (jarang terjadi di model normal, tapi aman dicek)
+        if len(probs) > 1:
+            prob_naik = float(probs[1])
+        else:
+            prob_naik = float(probs[0]) if model.classes_[0] == 1 else 0.0
+            
+        if prob_naik > 0.5:
+            arah = "naik"
+            confidence = prob_naik * 100
+        elif prob_naik < 0.4:
+            arah = "turun"
+            confidence = (1 - prob_naik) * 100
+        else:
+            arah = "stabil"
+            # Confidence untuk stabil: kedekatan ke 0.45
+            confidence = (1 - abs(prob_naik - 0.45) * 2) * 100
+            
+        return {
+            "arah_prediksi": arah,
+            "confidence_arah": round(confidence, 2)
+        }
+    except Exception as e:
+        logger.error(f"Error saat memprediksi arah: {e}")
+        return {"arah_prediksi": None, "confidence_arah": None}
+
 
 def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
     """
@@ -306,6 +370,9 @@ def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
         prediksi = model.predict(df_input)
         prediksi_rp = float(prediksi[0])
         
+        # Prediksi arah pergerakan harga
+        hasil_arah = prediksi_arah(df_input, label)
+        
         # Hitung tanggal prediksi
         horizon_days = int(label[1])  # "h1" -> 1, "h3" -> 3, "h7" -> 7
         tanggal_base = input_data.get("tanggal", datetime.now().date())
@@ -315,7 +382,7 @@ def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
             tanggal_base = tanggal_base.date()
         tanggal_prediksi = tanggal_base + timedelta(days=horizon_days)
         
-        logger.info(f"Prediksi {label} berhasil: Rp {prediksi_rp:,.0f}")
+        logger.info(f"Prediksi {label} berhasil: Rp {prediksi_rp:,.0f} | Arah: {hasil_arah.get('arah_prediksi')}")
         
         return {
             "horizon": label,
@@ -324,6 +391,8 @@ def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
             "model_version": model_version,
             "fitur_digunakan": len(feature_cols),
             "fitur_missing": len(missing_cols),
+            "arah_prediksi": hasil_arah.get("arah_prediksi"),
+            "confidence_arah": hasil_arah.get("confidence_arah"),
         }
         
     except HTTPException:

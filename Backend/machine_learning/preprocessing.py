@@ -400,6 +400,14 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     df["selisih_harga_1"] = df[TARGET].diff(1)  # perubahan harian
     df["selisih_harga_7"] = df[TARGET].diff(7)  # perubahan mingguan
 
+    # Fitur Arah Pergerakan Harga (Klasifikasi)
+    df["arah_1"] = np.sign(df["selisih_harga_1"])
+    df["arah_7"] = np.sign(df["selisih_harga_7"])
+    
+    # Fitur Streak Naik: counter berapa hari berturut-turut harga naik
+    # Jika arah_1 == 1, tambah 1, jika tidak reset ke 0
+    df["streak_naik"] = df["arah_1"].groupby((df["arah_1"] != 1).cumsum()).cumcount()
+
     # ── I. Fitur konteks historis (PERBAIKAN 4) ───────────────────────────
     # Tahun 2022 = masa pemulihan pasca-COVID, pola harga sangat tidak normal
     # Model perlu "diberitahu" bahwa data 2022 memiliki karakter berbeda
@@ -412,6 +420,17 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     df["target_h1"] = df[TARGET].shift(-1)  # prediksi besok
     df["target_h3"] = df[TARGET].shift(-3)  # prediksi 3 hari ke depan
     df["target_h7"] = df[TARGET].shift(-7)  # prediksi 7 hari ke depan
+
+    # Target klasifikasi: 1 jika harga target > harga hari ini, 0 jika tidak (turun/tetap)
+    df["arah_target_h1"] = (df["target_h1"] > df[TARGET]).astype(int)
+    df["arah_target_h3"] = (df["target_h3"] > df[TARGET]).astype(int)
+    df["arah_target_h7"] = (df["target_h7"] > df[TARGET]).astype(int)
+
+    # Karena target numerik di-shift, kita perlu memastikan baris terakhir target klasifikasi
+    # menjadi NaN agar sejalan dengan target regresi (mencegah evaluasi pada target palsu)
+    df.loc[df["target_h1"].isna(), "arah_target_h1"] = np.nan
+    df.loc[df["target_h3"].isna(), "arah_target_h3"] = np.nan
+    df.loc[df["target_h7"].isna(), "arah_target_h7"] = np.nan
 
     log(f"    -> Total fitur dibuat : {df.shape[1] - 2}")
     log(f"    -> Kolom target multi-horizon: target_h1, target_h3, target_h7")
@@ -651,6 +670,9 @@ def simpan_output(
                 "Prediksi H+1 (besok)",
                 "Prediksi H+3 (3 hari ke depan)",
                 "Prediksi H+7 (7 hari ke depan)",
+                "Arah Prediksi H+1 (1=Naik, 0=Turun/Tetap)",
+                "Arah Prediksi H+3 (1=Naik, 0=Turun/Tetap)",
+                "Arah Prediksi H+7 (1=Naik, 0=Turun/Tetap)",
             ],
         }
     )
@@ -697,7 +719,10 @@ def main():
 
     # PERBAIKAN 2: Hapus hardcode exclude cuaca — biarkan seleksi_fitur()
     # yang memutuskan mana yang redundan berdasarkan data aktual.
-    TARGET_COLS = ["target_h1", "target_h3", "target_h7"]
+    TARGET_COLS = [
+        "target_h1", "target_h3", "target_h7",
+        "arah_target_h1", "arah_target_h3", "arah_target_h7"
+    ]
     exclude = ["tanggal", TARGET, "harga_cabai_rawit"] + TARGET_COLS
     feature_cols = [
         c

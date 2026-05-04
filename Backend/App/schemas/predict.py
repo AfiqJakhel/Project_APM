@@ -60,6 +60,8 @@ class PrediksiResponse(BaseModel):
     prediksi_harga: float   # Rupiah
     status_harga: str       # "normal" | "tinggi" | "kritis"
     pesan: str              # Penjelasan status dalam Bahasa Indonesia
+    arah_prediksi: Optional[str] = None
+    confidence_arah: Optional[float] = None
 
 
 class PrediksiSemuaResponse(BaseModel):
@@ -109,6 +111,8 @@ class PrediksiOtomatisResponse(BaseModel):
     tanggal_prediksi: str
     prediksi_rp: float
     model_version: str
+    arah_prediksi: Optional[str] = None
+    confidence_arah: Optional[float] = None
 
 
 class DashboardResponse(BaseModel):

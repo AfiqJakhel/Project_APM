@@ -28,7 +28,21 @@ Chart.register(
   Legend
 );
 
-export default function PriceChart() {
+interface PriceChartProps {
+  labels?: string[];
+  data?: number[];
+  prediksiH1?: number | null;
+  prediksiH3?: number | null;
+  prediksiH7?: number | null;
+}
+
+export default function PriceChart({
+  labels,
+  data,
+  prediksiH1,
+  prediksiH3,
+  prediksiH7,
+}: PriceChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
 
@@ -43,89 +57,79 @@ export default function PriceChart() {
     const ctx = canvasRef.current.getContext("2d");
     if (!ctx) return;
 
-    // --- Data ---
-    const labels = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "Mei",
-      "Jun",
-      "Jul",
-      "Agt",
-      "Sep",
-      "Okt",
-      "Nov",
-      "Des",
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "24/4",
-      "25/4",
-      "26/4",
-      "27/4",
-      "28/4",
-      "29/4",
-      "30/4",
-      "1/5",
-      "2/5",
-      "3/5",
-      "4/5",
-    ];
+    // Use real data if provided, otherwise fallback to demo data
+    let chartLabels: string[];
+    let actualPrices: (number | null)[];
+    let predictedPrices: (number | null)[];
 
-    // Actual prices for CMK (historical)
-    const actualCMK = [
-      32000, 34500, 38000, 36000, 33000, 31000, 30000, 32500, 35000, 37000,
-      39500, 41000, 44000, 40000, 37500, 38500, 39000, 36100, 38500, 42500,
-      null, null, null, null, null, null, null,
-    ];
+    if (labels && data && data.length > 0) {
+      // Real data from API
+      chartLabels = [...labels];
+      actualPrices = [...data];
+      predictedPrices = new Array(data.length).fill(null);
 
-    // Predicted CMK (last portion overlaps + future)
-    const predictedCMK = [
-      null, null, null, null, null, null, null, null, null, null, null, null,
-      null, null, null, null, null, null, null, 42500, 43800, 44500, 45900,
-      47200, 48600, 49300, 50100,
-    ];
+      // Add prediction points
+      const lastPrice = data[data.length - 1];
+      // Connect prediction line from last actual point
+      predictedPrices[predictedPrices.length - 1] = lastPrice;
 
-    // Actual prices for CRM (historical)
-    const actualCRM = [
-      28000, 30000, 33000, 31500, 29000, 27500, 26000, 28500, 31000, 33500,
-      36000, 37500, 39500, 36500, 34000, 35000, 35500, 33000, 35500, 38000,
-      null, null, null, null, null, null, null,
-    ];
-
-    // Rainfall data (mm)
-    const rainfall = [
-      120, 140, 180, 200, 150, 80, 60, 70, 90, 130, 160, 220, 250, 200, 170,
-      190, 280, 300, 250, 320, 280, 260, 240, 220, 200, 180, 170,
-    ];
+      if (prediksiH1 !== null && prediksiH1 !== undefined) {
+        chartLabels.push("H+1");
+        actualPrices.push(null);
+        predictedPrices.push(prediksiH1);
+      }
+      if (prediksiH3 !== null && prediksiH3 !== undefined) {
+        chartLabels.push("H+3");
+        actualPrices.push(null);
+        predictedPrices.push(prediksiH3);
+      }
+      if (prediksiH7 !== null && prediksiH7 !== undefined) {
+        chartLabels.push("H+7");
+        actualPrices.push(null);
+        predictedPrices.push(prediksiH7);
+      }
+    } else {
+      // Fallback demo data
+      chartLabels = [
+        "Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt",
+        "Sep", "Okt", "Nov", "Des", "Jan", "Feb", "Mar", "Apr",
+        "24/4", "25/4", "26/4", "27/4", "28/4", "29/4", "30/4",
+        "1/5", "2/5", "3/5", "4/5",
+      ];
+      actualPrices = [
+        32000, 34500, 38000, 36000, 33000, 31000, 30000, 32500, 35000, 37000,
+        39500, 41000, 44000, 40000, 37500, 38500, 39000, 36100, 38500, 42500,
+        null, null, null, null, null, null, null,
+      ];
+      predictedPrices = [
+        null, null, null, null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, null, 42500, 43800, 44500, 45900,
+        47200, 48600, 49300, 50100,
+      ];
+    }
 
     // --- Gradient for actual line ---
     const greenGradient = ctx.createLinearGradient(0, 0, 0, 350);
     greenGradient.addColorStop(0, "rgba(15, 110, 86, 0.15)");
     greenGradient.addColorStop(1, "rgba(15, 110, 86, 0.01)");
 
+    // Compute reasonable Y axis bounds
+    const allValues = [...actualPrices, ...predictedPrices].filter(
+      (v): v is number => v !== null
+    );
+    const minVal = allValues.length > 0 ? Math.min(...allValues) : 24000;
+    const maxVal = allValues.length > 0 ? Math.max(...allValues) : 55000;
+    const padding = (maxVal - minVal) * 0.15 || 5000;
+
     chartRef.current = new Chart(ctx, {
-      type: "bar",
+      type: "line",
       data: {
-        labels,
+        labels: chartLabels,
         datasets: [
           {
-            type: "bar",
-            label: "Curah hujan",
-            data: rainfall,
-            backgroundColor: "rgba(56, 189, 248, 0.15)",
-            borderColor: "rgba(56, 189, 248, 0.3)",
-            borderWidth: 1,
-            borderRadius: 3,
-            yAxisID: "y1",
-            order: 3,
-          },
-          {
             type: "line",
-            label: "Aktual CMK",
-            data: actualCMK,
+            label: "Harga Aktual",
+            data: actualPrices,
             borderColor: "#0F6E56",
             backgroundColor: greenGradient,
             borderWidth: 2.5,
@@ -139,12 +143,12 @@ export default function PriceChart() {
           },
           {
             type: "line",
-            label: "Prediksi CMK",
-            data: predictedCMK,
+            label: "Prediksi",
+            data: predictedPrices,
             borderColor: "#0F6E56",
             borderWidth: 2,
             borderDash: [6, 4],
-            pointRadius: 3,
+            pointRadius: 4,
             pointBackgroundColor: "#0F6E56",
             pointBorderColor: "#fff",
             pointBorderWidth: 2,
@@ -153,20 +157,6 @@ export default function PriceChart() {
             fill: false,
             yAxisID: "y",
             order: 0,
-          },
-          {
-            type: "line",
-            label: "Aktual CRM",
-            data: actualCRM,
-            borderColor: "#E67E22",
-            borderWidth: 2,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: "#E67E22",
-            tension: 0.4,
-            fill: false,
-            yAxisID: "y",
-            order: 2,
           },
         ],
       },
@@ -197,9 +187,6 @@ export default function PriceChart() {
               label: function (context) {
                 const label = context.dataset.label || "";
                 const value = context.parsed.y;
-                if (label === "Curah hujan") {
-                  return ` ${label}: ${value} mm`;
-                }
                 return ` ${label}: Rp ${value?.toLocaleString("id-ID")}`;
               },
             },
@@ -207,23 +194,19 @@ export default function PriceChart() {
         },
         scales: {
           x: {
-            grid: {
-              display: false,
-            },
+            grid: { display: false },
             ticks: {
               color: "#9CA3AF",
               font: { size: 10 },
-              maxRotation: 0,
+              maxRotation: 45,
+              autoSkip: true,
+              maxTicksLimit: 20,
             },
-            border: {
-              display: false,
-            },
+            border: { display: false },
           },
           y: {
             position: "left" as const,
-            grid: {
-              color: "rgba(0,0,0,0.04)",
-            },
+            grid: { color: "rgba(0,0,0,0.04)" },
             ticks: {
               color: "#9CA3AF",
               font: { size: 10 },
@@ -235,29 +218,9 @@ export default function PriceChart() {
                 return `Rp ${(val / 1000).toFixed(0)}k`;
               },
             },
-            border: {
-              display: false,
-            },
-            min: 24000,
-            max: 55000,
-          },
-          y1: {
-            position: "right" as const,
-            grid: {
-              display: false,
-            },
-            ticks: {
-              color: "#9CA3AF",
-              font: { size: 10 },
-              callback: function (tickValue: string | number) {
-                return `${tickValue}mm`;
-              },
-            },
-            border: {
-              display: false,
-            },
-            min: 0,
-            max: 400,
+            border: { display: false },
+            min: Math.floor((minVal - padding) / 1000) * 1000,
+            max: Math.ceil((maxVal + padding) / 1000) * 1000,
           },
         },
       },
@@ -269,7 +232,7 @@ export default function PriceChart() {
         chartRef.current = null;
       }
     };
-  }, []);
+  }, [labels, data, prediksiH1, prediksiH3, prediksiH7]);
 
   return <canvas ref={canvasRef} />;
 }

@@ -19,8 +19,8 @@ from config.settings import (
     BATAS_HARGA_TINGGI,
     BATAS_HARGA_KRITIS,
 )
-from app.core import predictor
-from app.schemas.predict import DashboardResponse, StatistikBulananItem
+from App.core import predictor
+from App.schemas.predict import DashboardResponse, StatistikBulananItem
 
 router = APIRouter()
 

@@ -750,3 +750,385 @@ html, body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========== Sidebar Link Overrides ========== */
+.sidebar-menu-item {
+  text-decoration: none;
+  color: var(--text-secondary);
+}
+
+.sidebar-menu-item:visited {
+  color: var(--text-secondary);
+}
+
+.sidebar-menu-item.active,
+.sidebar-menu-item.active:visited {
+  color: var(--green);
+}
+
+/* ========== Loading States ========== */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-spinner-sm {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ========== Prediksi Page — Horizon Cards ========== */
+.horizon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.horizon-card {
+  background: var(--white);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.horizon-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--accent, var(--green));
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.horizon-card:hover {
+  border-color: var(--green-muted);
+  box-shadow: var(--shadow-md);
+}
+
+.horizon-card:hover::before {
+  opacity: 0.5;
+}
+
+.horizon-card-active {
+  border-color: var(--accent, var(--green));
+  background: var(--green-lighter);
+  box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.1);
+}
+
+.horizon-card-active::before {
+  opacity: 1;
+}
+
+.horizon-card-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.horizon-card-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ========== Predict Button ========== */
+.predict-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, var(--green) 0%, #14A37F 100%);
+  color: white;
+  border: none;
+  padding: 12px 28px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-top: 8px;
+  box-shadow: 0 2px 8px rgba(15, 110, 86, 0.3);
+}
+
+.predict-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(15, 110, 86, 0.4);
+}
+
+.predict-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.predict-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ========== Filter Form ========== */
+.filter-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-input {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--white);
+  transition: border-color var(--transition);
+  outline: none;
+}
+
+.filter-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(15, 110, 86, 0.1);
+}
+
+/* ========== Info List ========== */
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
+}
+
+.info-item:hover {
+  background: var(--green-lighter);
+}
+
+.info-item strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.info-item p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.info-number {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  background: linear-gradient(135deg, var(--green), #14A37F);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ========== Metrik Page ========== */
+.metrik-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.metrik-grid {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+}
+
+.metrik-hero {
+  flex: 0 0 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.metrik-hero-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metrik-hero-value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.metrik-hero-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.metrik-hero-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.metrik-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metrik-detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.metrik-detail-item:last-child {
+  border-bottom: none;
+}
+
+.metrik-detail-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.metrik-detail-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+
+/* ========== Info Model Detail Rows ========== */
+.info-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.info-detail-row:last-child {
+  border-bottom: none;
+}
+
+.info-detail-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.info-detail-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+  text-align: right;
+  max-width: 60%;
+}
+
+/* ========== Metric sub down ========== */
+.metric-sub.down {
+  color: var(--red);
+}
+
+/* ========== Responsive for new pages ========== */
+@media (max-width: 1200px) {
+  .metrik-cards-grid {
+    grid-template-columns: 1fr;
+  }
+  .horizon-grid {
+    grid-template-columns: 1fr;
+  }
+  .metrik-grid {
+    flex-direction: column;
+  }
+  .metrik-hero {
+    flex: none;
+  }
+  .filter-row {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-row {
+    flex-direction: column;
+  }
+  .horizon-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -21,8 +21,8 @@ from config.settings import (
     HORIZON_LABEL,
     MODEL_DIR,
 )
-from app.core import predictor
-from app.schemas.predict import (
+from App.core import predictor
+from App.schemas.predict import (
     PrediksiRequest, PrediksiResponse, PrediksiSemuaResponse,
     TanggalTersediaResponse, FiturTerkiniResponse, DataHistorisResponse,
     ModelMetrikResponse, CacheInfoResponse, PrediksiOtomatisResponse

@@ -15,8 +15,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core import predictor
-from app.routes import predict, history, dashboard
+from App.core import predictor
+from App.routes import predict, history, dashboard
 
 # =============================================================================
 # LIFESPAN EVENT — load model & dataset saat FastAPI pertama dijalankan

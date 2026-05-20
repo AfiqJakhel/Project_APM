@@ -4,6 +4,8 @@ Prediksi Harga Cabai Kota Padang
 Jalankan: uvicorn app.main:app --reload
 """
 import sys
+import asyncio
+import logging
 from pathlib import Path
 
 # Tambah Backend/ ke sys.path agar semua import bisa ditemukan
@@ -16,29 +18,62 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import predictor
-from app.routes import predict, history, dashboard
+from app.core.scheduler import setup_scheduler, stop_scheduler
+from app.routes import predict, history, dashboard, realtime
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
-# LIFESPAN EVENT — load model & dataset saat FastAPI pertama dijalankan
+# INITIAL UPDATE — dijalankan saat startup, non-blocking
+# =============================================================================
+async def _initial_update():
+    """Update data sekali saat startup agar data selalu fresh saat server restart."""
+    await asyncio.sleep(5)   # Tunggu model selesai load dulu
+    try:
+        from app.core.scraper import jalankan_update_realtime
+        logger.info("[Startup] Menjalankan initial update real-time...")
+        await jalankan_update_realtime()
+        logger.info("[Startup] Initial update selesai")
+    except Exception as e:
+        logger.warning(f"[Startup] Initial update gagal (tidak masalah): {e}")
+
+
+# =============================================================================
+# LIFESPAN EVENT — load model, dataset, dan scheduler saat startup
 # =============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load semua model XGBoost dan dataset saat server pertama kali start."""
+    """Load semua model XGBoost, dataset, dan setup scheduler saat server start."""
     print("\n[Startup] Memuat ML artifacts dan dataset...")
     predictor.preload_artifacts()
     predictor.load_dataset_to_cache()
-    
+
     info = predictor.get_cache_info()
     models_loaded = info.get("models_loaded", [])
     if models_loaded:
         print(f"[Startup] Model siap: {models_loaded}")
     else:
         print("[Startup] WARNING: Tidak ada model yang berhasil dimuat!")
-        
+
+    # Setup scheduler harian otomatis
+    try:
+        setup_scheduler()
+    except Exception as e:
+        print(f"[Startup] Scheduler gagal start (tidak masalah): {e}")
+
+    # Initial update — non-blocking background task
+    asyncio.create_task(_initial_update())
+
     yield
-    
+
+    # Shutdown
     print("\n[Shutdown] Membersihkan resources...")
+    try:
+        stop_scheduler()
+    except Exception:
+        pass
     predictor.clear_cache()
+
 
 # =============================================================================
 # INISIALISASI FASTAPI
@@ -51,7 +86,7 @@ app = FastAPI(
         "Harga Cabai di Kota Padang Berbasis Web sebagai Upaya "
         "Pengendalian Inflasi Daerah Menggunakan Metode XGBoost"
     ),
-    version     = "1.0.0",
+    version     = "2.0.0",
     docs_url    = "/docs",
     redoc_url   = "/redoc",
     lifespan    = lifespan,
@@ -74,7 +109,6 @@ app.add_middleware(
 )
 
 
-
 # =============================================================================
 # ROOT ENDPOINT
 # =============================================================================
@@ -91,8 +125,10 @@ def root():
             "prediksi"  : "/api/predict",
             "historis"  : "/api/history",
             "dashboard" : "/api/dashboard",
+            "realtime"  : "/api/realtime",
         }
     }
+
 
 @app.get("/health", tags=["Root"])
 def health():
@@ -103,9 +139,11 @@ def health():
         "n_model"     : len(predictor.get_cache_info().get("models_loaded", [])),
     }
 
+
 # =============================================================================
 # REGISTER ROUTES
 # =============================================================================
 app.include_router(predict.router,   prefix="/api/predict",   tags=["Prediksi"])
 app.include_router(history.router,   prefix="/api/history",   tags=["Historis"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(realtime.router,  prefix="/api/realtime",  tags=["Real-time Data"])

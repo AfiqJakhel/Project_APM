@@ -18,6 +18,7 @@ from config.settings import (
     TARGET,
     BATAS_HARGA_TINGGI,
     BATAS_HARGA_KRITIS,
+    REALTIME_STATUS_FILE,
 )
 from app.core import predictor
 from app.schemas.predict import DashboardResponse, StatistikBulananItem
@@ -29,6 +30,34 @@ NAMA_BULAN = [
     "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
     "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ]
+
+
+def _get_realtime_info() -> dict:
+    """Baca realtime_status.json untuk info real-time di dashboard."""
+    import json
+    try:
+        if REALTIME_STATUS_FILE.exists():
+            with open(REALTIME_STATUS_FILE, "r", encoding="utf-8") as f:
+                st = json.load(f)
+            return {
+                "data_status"        : st.get("harga_status", "fallback"),
+                "waktu_update"       : st.get("waktu_update"),
+                "harga_hari_ini_sumber": "PIHPS BI" if st.get("harga_status") == "live" else "Data historis",
+                "cuaca_sekarang"     : {
+                    "suhu_rata"  : st.get("suhu_rata"),
+                    "kelembaban" : st.get("kelembaban"),
+                    "curah_hujan": st.get("curah_hujan"),
+                    "status"     : st.get("cuaca_status", "unknown"),
+                },
+            }
+    except Exception:
+        pass
+    return {
+        "data_status"          : "fallback",
+        "waktu_update"         : None,
+        "harga_hari_ini_sumber": "Data historis",
+        "cuaca_sekarang"       : None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +188,9 @@ async def get_dashboard():
         status_model  = len(models_loaded) > 0
         n_model_aktif = len(models_loaded)
 
+        # ---- Info real-time ----
+        realtime_info = _get_realtime_info()
+
         return DashboardResponse(
             tanggal_update=tanggal_update,
             harga_hari_ini=round(harga_hari_ini, 2),
@@ -172,6 +204,7 @@ async def get_dashboard():
             status_model=status_model,
             n_model_aktif=n_model_aktif,
             status_inflasi=status_inflasi,
+            realtime=realtime_info,
         )
 
     except HTTPException:

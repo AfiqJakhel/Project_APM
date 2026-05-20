@@ -48,6 +48,29 @@ class PrediksiRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# REAL-TIME SCHEMAS (BARU)
+# ---------------------------------------------------------------------------
+
+class CuacaInfo(BaseModel):
+    """Info cuaca yang digunakan saat prediksi."""
+    suhu_rata   : Optional[float] = None
+    kelembaban  : Optional[float] = None
+    curah_hujan : Optional[float] = None
+    status      : str = "unknown"
+
+
+class RealtimeStatus(BaseModel):
+    """Status sistem real-time — response dari GET /api/realtime/status."""
+    data_harga_status    : str
+    data_cuaca_status    : str
+    tanggal_data_terkini : Optional[str] = None
+    waktu_update_terakhir: Optional[str] = None
+    harga_terkini        : Optional[float] = None
+    cuaca_terkini        : Optional[CuacaInfo] = None
+    pesan                : str
+
+
+# ---------------------------------------------------------------------------
 # RESPONSE SCHEMAS
 # ---------------------------------------------------------------------------
 
@@ -113,6 +136,10 @@ class PrediksiOtomatisResponse(BaseModel):
     model_version: str
     arah_prediksi: Optional[str] = None
     confidence_arah: Optional[float] = None
+    # ── Real-time fields (opsional, backward-compatible) ──────────────────────
+    data_status    : Optional[str]       = None   # "live" | "fallback"
+    data_tanggal   : Optional[str]       = None
+    cuaca_digunakan: Optional[CuacaInfo] = None
 
 
 class DashboardResponse(BaseModel):
@@ -130,6 +157,8 @@ class DashboardResponse(BaseModel):
     status_model: bool
     n_model_aktif: int
     status_inflasi: str     # "normal" | "waspada" | "kritis"
+    # ── Real-time info (opsional) ─────────────────────────────────────────────
+    realtime: Optional[dict] = None
 
 class StatistikBulananItem(BaseModel):
     bulan: int

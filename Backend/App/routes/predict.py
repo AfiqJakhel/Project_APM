@@ -20,12 +20,14 @@ from config.settings import (
     BATAS_HARGA_KRITIS,
     HORIZON_LABEL,
     MODEL_DIR,
+    REALTIME_STATUS_FILE,
 )
 from app.core import predictor
 from app.schemas.predict import (
     PrediksiRequest, PrediksiResponse, PrediksiSemuaResponse,
     TanggalTersediaResponse, FiturTerkiniResponse, DataHistorisResponse,
-    ModelMetrikResponse, CacheInfoResponse, PrediksiOtomatisResponse
+    ModelMetrikResponse, CacheInfoResponse, PrediksiOtomatisResponse,
+    CuacaInfo,
 )
 
 router = APIRouter(tags=["Prediksi Harga Cabai"])
@@ -33,6 +35,53 @@ router = APIRouter(tags=["Prediksi Harga Cabai"])
 # ---------------------------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------------------------
+
+def _get_cuaca_untuk_prediksi() -> CuacaInfo:
+    """
+    Ambil cuaca terkini untuk digunakan di prediksi.
+    Urutan: realtime_status.json (fresh < 6 jam) → rata-rata historis.
+    """
+    import json
+    from datetime import datetime, timedelta
+    try:
+        if REALTIME_STATUS_FILE.exists():
+            with open(REALTIME_STATUS_FILE, "r", encoding="utf-8") as f:
+                st = json.load(f)
+            waktu_update_str = st.get("waktu_update")
+            if waktu_update_str:
+                waktu_update = datetime.fromisoformat(waktu_update_str)
+                if datetime.now() - waktu_update < timedelta(hours=6):
+                    return CuacaInfo(
+                        suhu_rata   = st.get("suhu_rata"),
+                        kelembaban  = st.get("kelembaban"),
+                        curah_hujan = st.get("curah_hujan"),
+                        status      = st.get("cuaca_status", "live"),
+                    )
+    except Exception:
+        pass
+    # Fallback: rata-rata historis Kota Padang
+    return CuacaInfo(
+        suhu_rata   = 27.0,
+        kelembaban  = 80.0,
+        curah_hujan = 5.0,
+        status      = "fallback",
+    )
+
+
+def _get_data_status() -> tuple[str, str]:
+    """
+    Ambil status dan tanggal data terkini dari realtime_status.json.
+    Returns: (data_status, tanggal)
+    """
+    import json
+    try:
+        if REALTIME_STATUS_FILE.exists():
+            with open(REALTIME_STATUS_FILE, "r", encoding="utf-8") as f:
+                st = json.load(f)
+            return st.get("harga_status", "fallback"), st.get("tanggal_data", "")
+    except Exception:
+        pass
+    return "fallback", ""
 
 def _load_dataset() -> pd.DataFrame:
     """Baca dataset dari cache via predictor."""
@@ -413,22 +462,29 @@ async def prediksi_otomatis(
     try:
         # Ambil data terkini otomatis
         input_data = predictor.get_fitur_terkini()
-        
+
+        # Ambil cuaca dan status real-time
+        cuaca_info  = _get_cuaca_untuk_prediksi()
+        data_status, data_tanggal = _get_data_status()
+
         # Prediksi
         hasil = await predictor.prediksi_harga(input_data, horizon)
-        
+
         # Format response
         return {
-            "status": "success",
-            "horizon": horizon,
-            "keterangan": HORIZON_LABEL.get(horizon, f"Prediksi {horizon}"),
+            "status"         : "success",
+            "horizon"        : horizon,
+            "keterangan"     : HORIZON_LABEL.get(horizon, f"Prediksi {horizon}"),
             "tanggal_prediksi": hasil["tanggal_prediksi"],
-            "prediksi_rp": hasil["prediksi_rp"],
-            "model_version": hasil["model_version"],
-            "arah_prediksi": hasil.get("arah_prediksi"),
+            "prediksi_rp"    : hasil["prediksi_rp"],
+            "model_version"  : hasil["model_version"],
+            "arah_prediksi"  : hasil.get("arah_prediksi"),
             "confidence_arah": hasil.get("confidence_arah"),
+            "data_status"    : data_status,
+            "data_tanggal"   : data_tanggal,
+            "cuaca_digunakan": cuaca_info,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

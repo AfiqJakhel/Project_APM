@@ -47,3 +47,41 @@ HORIZON_LABEL = {
 MIN_TRAIN_DAYS = 365
 STEP_DAYS      = 30
 TEST_DAYS      = 30
+
+# ── Real-time data settings ───────────────────────────────────────────────────
+
+# PIHPS BI — Scraper settings
+PIHPS_URL = "https://www.bi.go.id/hargapangan/TabelHarga/PasarTradisionalDaerah"
+
+# Filter scraping — sesuaikan dengan filter di website PIHPS BI
+PIHPS_PROVINSI  = "Sumatera Barat"
+PIHPS_KOTA      = "Kota Padang"
+PIHPS_KOMODITAS = ["Cabai Merah Keriting", "Cabai Rawit Hijau"]
+
+# Mapping nama komoditas PIHPS ke nama kolom dataset
+PIHPS_KOLOM_MAP = {
+    "Cabai Merah Keriting": "harga_cabai_merah",
+    "Cabai Rawit Hijau"   : "harga_cabai_rawit",
+}
+
+# Open-Meteo API — Koordinat Kota Padang
+CUACA_LATITUDE   = -0.9471
+CUACA_LONGITUDE  = 100.4172
+CUACA_TIMEZONE   = "Asia/Jakarta"
+CUACA_API_URL    = (
+    "https://api.open-meteo.com/v1/forecast"
+    "?latitude={lat}&longitude={lon}"
+    "&current=temperature_2m,relative_humidity_2m,precipitation"
+    "&timezone={tz}"
+)
+
+# Scheduler settings
+SCHEDULER_JAM   = 14   # jam 14.00 WIB
+SCHEDULER_MENIT = 0
+
+# File status real-time (JSON kecil untuk tracking update terakhir)
+REALTIME_STATUS_FILE = DATA_DIR / "realtime_status.json"
+
+# Timeout scraper (detik)
+SCRAPER_TIMEOUT  = 30
+SCRAPER_HEADLESS = True   # True = tidak buka jendela browser

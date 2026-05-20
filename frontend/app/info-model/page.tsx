@@ -231,28 +231,24 @@ export default function InfoModelPage() {
               <div className="card-body">
                 <div className="info-list">
                   <div className="info-item">
-                    <span className="info-number">📊</span>
                     <div>
                       <strong>Algoritma: XGBoost (Extreme Gradient Boosting)</strong>
                       <p>Model ensemble berbasis decision tree yang menggunakan gradient boosting untuk prediksi harga</p>
                     </div>
                   </div>
                   <div className="info-item">
-                    <span className="info-number">🎯</span>
                     <div>
                       <strong>3 Horizon Prediksi: H+1, H+3, H+7</strong>
                       <p>Masing-masing horizon menggunakan model terpisah yang dioptimalkan khusus</p>
                     </div>
                   </div>
                   <div className="info-item">
-                    <span className="info-number">📡</span>
                     <div>
                       <strong>Sumber Data: PIHPS BI, BMKG, SKB 3 Menteri</strong>
                       <p>Data harga dari Panel Informasi Harga Pangan Strategis Bank Indonesia, cuaca dari BMKG</p>
                     </div>
                   </div>
                   <div className="info-item">
-                    <span className="info-number">⚙️</span>
                     <div>
                       <strong>Stack: FastAPI + Next.js + Chart.js</strong>
                       <p>Backend Python FastAPI, frontend Next.js TypeScript, visualisasi Chart.js</p>

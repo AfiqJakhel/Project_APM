@@ -393,20 +393,44 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
         df["is_hari_hujan"] = (df["curah_hujan"] > 1.0).astype(int)
     # suhu_rata dan curah_hujan dipertahankan langsung dari merge
 
-    # ── H. Diferensiasi harga (PERBAIKAN 4) ──────────────────────────────
-    # Menangkap "fluktuasi" secara eksplisit sesuai judul penelitian.
-    # diff(n) = harga_hari_ini - harga_n_hari_lalu
-    # Ini berbeda dengan momentum_7 yang menggunakan shift(1) sebagai basis
-    df["selisih_harga_1"] = df[TARGET].diff(1)  # perubahan harian
-    df["selisih_harga_7"] = df[TARGET].diff(7)  # perubahan mingguan
+    # ── H. Fitur Arah Pergerakan Harga (ANTI-LEAKAGE) ────────────────────
+    # PENTING: Semua fitur arah menggunakan shift(1) agar hanya melihat masa lalu.
+    # diff(n) tanpa shift menyertakan harga hari ini (t) → data leakage ke model.
+    # Sebelumnya: selisih_harga_1/7, arah_1/7, streak_naik menggunakan harga[t] → BOCOR.
+    harga_shift1 = df[TARGET].shift(1)  # harga kemarin sebagai basis semua fitur
 
-    # Fitur Arah Pergerakan Harga (Klasifikasi)
-    df["arah_1"] = np.sign(df["selisih_harga_1"])
-    df["arah_7"] = np.sign(df["selisih_harga_7"])
-    
-    # Fitur Streak Naik: counter berapa hari berturut-turut harga naik
-    # Jika arah_1 == 1, tambah 1, jika tidak reset ke 0
-    df["streak_naik"] = df["arah_1"].groupby((df["arah_1"] != 1).cumsum()).cumcount()
+    # Persentase perubahan (lebih informatif dari selisih Rp karena scale-free)
+    df["pct_change_1"] = harga_shift1.pct_change(1) * 100   # % perubahan 1 hari lalu
+    df["pct_change_3"] = harga_shift1.pct_change(3) * 100   # % perubahan 3 hari lalu
+    df["pct_change_7"] = harga_shift1.pct_change(7) * 100   # % perubahan 7 hari lalu
+
+    # Arah historis per hari (bebas leakage — semua pakai data masa lalu saja)
+    df["arah_lag1"] = np.sign(df[TARGET].shift(1) - df[TARGET].shift(2))  # arah kemarin
+    df["arah_lag2"] = np.sign(df[TARGET].shift(2) - df[TARGET].shift(3))  # arah 2 hari lalu
+    df["arah_lag3"] = np.sign(df[TARGET].shift(3) - df[TARGET].shift(4))  # arah 3 hari lalu
+
+    # Streak naik yang aman: berapa dari 3 hari terakhir harga naik? (nilai 0–3)
+    # Berbeda dari versi lama (cumcount dari arah_1 yang bocor)
+    df["streak_naik"] = (
+        pd.DataFrame({
+            "a1": df["arah_lag1"],
+            "a2": df["arah_lag2"],
+            "a3": df["arah_lag3"],
+        }) == 1
+    ).sum(axis=1)
+
+    # Proporsi hari naik dalam 7 dan 14 hari terakhir (range 0.0–1.0)
+    # min_periods mencegah NaN berlebihan di awal series
+    diff_safe = df[TARGET].shift(1).diff()  # diff dari data kemarin → kausal
+    df["prop_naik_7"]  = (diff_safe > 0).rolling(7,  min_periods=3).mean()
+    df["prop_naik_14"] = (diff_safe > 0).rolling(14, min_periods=7).mean()
+
+    # Pastikan kolom bocor lama tidak ada di dataset output
+    _kolom_bocor = ["selisih_harga_1", "selisih_harga_7", "arah_1", "arah_7"]
+    df.drop(columns=[c for c in _kolom_bocor if c in df.columns], inplace=True)
+    log(f"    -> Kolom bocor dihapus    : {[c for c in _kolom_bocor]}")
+    log(f"    -> Fitur arah baru (aman) : pct_change_1/3/7, arah_lag1/2/3, "
+        f"streak_naik (0-3), prop_naik_7/14")
 
     # ── I. Fitur konteks historis (PERBAIKAN 4) ───────────────────────────
     # Tahun 2022 = masa pemulihan pasca-COVID, pola harga sangat tidak normal

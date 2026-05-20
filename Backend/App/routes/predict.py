@@ -22,8 +22,8 @@ from config.settings import (
     MODEL_DIR,
     REALTIME_STATUS_FILE,
 )
-from App.core import predictor
-from App.schemas.predict import (
+from app.core import predictor
+from app.schemas.predict import (
     PrediksiRequest, PrediksiResponse, PrediksiSemuaResponse,
     TanggalTersediaResponse, FiturTerkiniResponse, DataHistorisResponse,
     ModelMetrikResponse, CacheInfoResponse, PrediksiOtomatisResponse,
@@ -978,7 +978,7 @@ def model_info():
 # ---------------------------------------------------------------------------
 
 @router.post("/", response_model=PrediksiResponse, summary="[LEGACY] Prediksi dengan request body")
-def prediksi_harga_endpoint(req: PrediksiRequest):
+def prediksi_harga_endpoint_legacy(req: PrediksiRequest):
     """
     **[LEGACY] Prediksi harga cabai dengan request body.**
     
@@ -1109,7 +1109,7 @@ def prediksi_semua_dengan_tanggal(
 # ---------------------------------------------------------------------------
 
 @router.get("/tanggal-tersedia", summary="Rentang tanggal tersedia di dataset")
-def tanggal_tersedia():
+def tanggal_tersedia_legacy():
     """
     Kembalikan tanggal minimum dan maksimum yang tersedia di dataset.
     Berguna untuk validasi input tanggal di frontend React agar tidak
@@ -1146,7 +1146,7 @@ def tanggal_tersedia():
 # ---------------------------------------------------------------------------
 
 @router.get("/fitur-terkini", summary="Ambil data fitur terkini")
-def fitur_terkini():
+def fitur_terkini_legacy():
     """
     Ambil data fitur terkini dari dataset (baris terakhir).
     Berguna untuk pre-fill form prediksi di frontend.
@@ -1174,7 +1174,7 @@ def fitur_terkini():
 # ---------------------------------------------------------------------------
 
 @router.get("/cache-info", summary="Informasi cache artifacts")
-def cache_info():
+def cache_info_legacy():
     """
     Ambil informasi tentang artifacts yang sudah di-cache.
     Berguna untuk debugging dan monitoring.

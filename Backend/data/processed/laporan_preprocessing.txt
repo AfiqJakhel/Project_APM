@@ -62,12 +62,14 @@
     -> Hari libur ditandai  : 116 hari
 
 [5] Feature engineering (v2 — fitur selektif)...
-    -> Total fitur dibuat : 45
+    -> Kolom bocor dihapus    : ['selisih_harga_1', 'selisih_harga_7', 'arah_1', 'arah_7']
+    -> Fitur arah baru (aman) : pct_change_1/3/7, arah_lag1/2/3, streak_naik (0-3), prop_naik_7/14
+    -> Total fitur dibuat : 49
     -> Kolom target multi-horizon: target_h1, target_h3, target_h7
 
 [6] Final cleaning & validasi...
     -> Baris dihapus (warm-up) : 30
-    -> Shape final             : (1536, 47)
+    -> Shape final             : (1536, 51)
     -> Total missing values    : 0
     -> Nilai target <= 0       : 0
 
@@ -75,7 +77,7 @@
   RINGKASAN DATASET FINAL
 =======================================================
   Jumlah baris    : 1,536
-  Jumlah kolom    : 47
+  Jumlah kolom    : 51
   Rentang tanggal : 2022-02-02 -> 2026-04-17
   Harga Cabai Merah:
     Min  : Rp     22,000
@@ -88,27 +90,27 @@
     Mean : Rp     41,417
 =======================================================
 
-[5C] Kandidat fitur sebelum seleksi: 38 fitur
+[5C] Kandidat fitur sebelum seleksi: 42 fitur
 
 [5B] Seleksi fitur otomatis...
     ! Hapus fitur hampir konstan (std < 0.01): ['is_pra_lebaran', 'is_pasca_lebaran']
     ! Hapus fitur korelasi tinggi (r > 0.95): ['bulan', 'lag_14', 'roll_mean_7']
-    -> Fitur sebelum seleksi : 38
+    -> Fitur sebelum seleksi : 42
     -> Fitur dihapus         : 5 fitur
-    -> Fitur setelah seleksi : 33 fitur
-    -> Fitur final           : ['suhu_rata', 'kelembaban', 'curah_hujan', 'lama_penyinaran', 'kec_angin', 'is_libur_nasional', 'kuartal', 'is_weekend', 'is_awal_bulan', 'bulan_sin', 'bulan_cos', 'is_lebaran', 'is_natal_tahunbaru', 'is_musim_panen', 'lag_1', 'lag_7', 'lag_30', 'rawit_lag_1', 'rawit_lag_7', 'roll_std_7', 'roll_mean_30', 'roll_std_30', 'momentum_7', 'rasio_tren_7_30', 'volatilitas_14', 'roll_hujan_30', 'is_hari_hujan', 'selisih_harga_1', 'selisih_harga_7', 'arah_1', 'arah_7', 'streak_naik', 'is_pasca_covid']
+    -> Fitur setelah seleksi : 37 fitur
+    -> Fitur final           : ['suhu_rata', 'kelembaban', 'curah_hujan', 'lama_penyinaran', 'kec_angin', 'is_libur_nasional', 'kuartal', 'is_weekend', 'is_awal_bulan', 'bulan_sin', 'bulan_cos', 'is_lebaran', 'is_natal_tahunbaru', 'is_musim_panen', 'lag_1', 'lag_7', 'lag_30', 'rawit_lag_1', 'rawit_lag_7', 'roll_std_7', 'roll_mean_30', 'roll_std_30', 'momentum_7', 'rasio_tren_7_30', 'volatilitas_14', 'roll_hujan_30', 'is_hari_hujan', 'pct_change_1', 'pct_change_3', 'pct_change_7', 'arah_lag1', 'arah_lag2', 'arah_lag3', 'streak_naik', 'prop_naik_7', 'prop_naik_14', 'is_pasca_covid']
 
 [7] Normalisasi fitur (RobustScaler — tahan price shock)...
-    -> Fitur dinormalisasi        : 33
+    -> Fitur dinormalisasi        : 37
     -> Target disimpan (asli Rp) : ['harga_cabai_merah', 'target_h1', 'target_h3', 'target_h7', 'arah_target_h1', 'arah_target_h3', 'arah_target_h7']
-    -> Total kolom output         : 42
+    -> Total kolom output         : 46
     -> Scaler disimpan ke         : C:\Data Afiq\Tugas\APM\Project TB APM\Backend\machine_learning\output\xgboost_models\scaler.pkl
     -> Median fitur (center)      : min=-0.0, max=43670.8
 
 [8] Menyimpan semua output...
-    + dataset_preprocessed.csv  (1,536 baris, 47 kolom, nilai asli)
+    + dataset_preprocessed.csv  (1,536 baris, 51 kolom, nilai asli)
     + train.csv  (1,228 baris, s/d 2025-06-13)
     + test.csv   (308 baris, mulai 2025-06-14)
     + Baris dibuang (target_h7 NaN): 0
-    + info_fitur.csv     (33 fitur setelah seleksi)
+    + info_fitur.csv     (37 fitur setelah seleksi)
     + info_target.csv    (7 target)

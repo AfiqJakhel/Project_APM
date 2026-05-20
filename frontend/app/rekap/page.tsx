@@ -141,8 +141,8 @@ export default function RekapPage() {
                         <td>{p.error ? "—" : p.tanggal_prediksi}</td>
                         <td style={{ fontWeight: 700 }}>{p.error ? "Error" : formatRp(p.prediksi_rp)}</td>
                         <td>
-                          {p.arah_prediksi === "naik" ? "📈 Naik" :
-                           p.arah_prediksi === "turun" ? "📉 Turun" : "➡️ Stabil"}
+                          {p.arah_prediksi === "naik" ? "Naik" :
+                           p.arah_prediksi === "turun" ? "Turun" : "Stabil"}
                         </td>
                       </tr>
                     )) : (

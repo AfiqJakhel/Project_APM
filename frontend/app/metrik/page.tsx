@@ -193,7 +193,6 @@ export default function MetrikPage() {
                           {vals.map((v, i) => (
                             <td key={i} style={{ fontWeight: i === bestIdx ? 700 : 400, color: i === bestIdx ? "var(--green)" : undefined }}>
                               {format(v)}
-                              {i === bestIdx && " ⭐"}
                             </td>
                           ))}
                           <td style={{ fontSize: 11, color: "var(--text-muted)" }}>{info.better}</td>

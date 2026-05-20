@@ -18,8 +18,6 @@ export default function HistorisPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [limit, setLimit] = useState(90);
 
   const loadData = useCallback(async () => {
@@ -27,8 +25,6 @@ export default function HistorisPage() {
     setError(null);
     try {
       const result = await fetchHistory({
-        start: startDate || undefined,
-        end: endDate || undefined,
         limit,
       });
       setData(result);
@@ -37,7 +33,7 @@ export default function HistorisPage() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, limit]);
+  }, [limit]);
 
   useEffect(() => {
     loadData();
@@ -79,27 +75,9 @@ export default function HistorisPage() {
             <span className="badge badge-green">{data.length} data</span>
           </div>
           <div className="card-body">
-            <div className="filter-row">
+            <div className="filter-row" style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
               <div className="filter-group">
-                <label className="filter-label">Tanggal Mulai</label>
-                <input
-                  type="date"
-                  className="filter-input"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                />
-              </div>
-              <div className="filter-group">
-                <label className="filter-label">Tanggal Akhir</label>
-                <input
-                  type="date"
-                  className="filter-input"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                />
-              </div>
-              <div className="filter-group">
-                <label className="filter-label">Jumlah Data</label>
+                <label className="filter-label">Rentang Waktu</label>
                 <select
                   className="filter-input"
                   value={limit}
@@ -111,11 +89,6 @@ export default function HistorisPage() {
                   <option value={180}>180 hari</option>
                   <option value={365}>365 hari</option>
                 </select>
-              </div>
-              <div className="filter-group" style={{ alignSelf: "flex-end" }}>
-                <button className="predict-btn" onClick={loadData} disabled={loading} style={{ marginTop: 0 }}>
-                  {loading ? "Memuat..." : "🔍 Tampilkan"}
-                </button>
               </div>
             </div>
           </div>

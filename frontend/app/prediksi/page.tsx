@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { fetchPrediksi, type PrediksiSingleResponse } from "../lib/api";
 
 /* ──────────── Helpers ──────────── */
@@ -14,11 +14,7 @@ function statusBadge(harga: number): { label: string; cls: string } {
   return { label: "Normal", cls: "badge-green" };
 }
 
-function arahIcon(arah?: string | null): string {
-  if (arah === "naik") return "📈";
-  if (arah === "turun") return "📉";
-  return "➡️";
-}
+
 
 const horizonInfo = {
   h1: { label: "H+1 (Besok)", desc: "Prediksi harga 1 hari ke depan", color: "#0F6E56" },
@@ -35,19 +31,22 @@ export default function PrediksiPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handlePredict() {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const data = await fetchPrediksi(selectedHorizon);
-      setResult(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal memuat prediksi");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    async function runPredict() {
+      setLoading(true);
+      setError(null);
+      setResult(null);
+      try {
+        const data = await fetchPrediksi(selectedHorizon);
+        setResult(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Gagal memuat prediksi");
+      } finally {
+        setLoading(false);
+      }
     }
-  }
+    runPredict();
+  }, [selectedHorizon]);
 
   const info = horizonInfo[selectedHorizon];
   const status = result ? statusBadge(result.prediksi_rp) : null;
@@ -86,21 +85,13 @@ export default function PrediksiPage() {
                 );
               })}
             </div>
-
-            <button
-              className="predict-btn"
-              onClick={handlePredict}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <span className="loading-spinner-sm" />
-                  Memproses...
-                </>
-              ) : (
-                <>🔮 Jalankan Prediksi {info.label}</>
-              )}
-            </button>
+            
+            {loading && (
+              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-secondary)' }}>
+                <span className="loading-spinner-sm" style={{ borderColor: 'rgba(15,110,86,0.3)', borderTopColor: 'var(--primary)' }} />
+                Memproses prediksi {info.label}...
+              </div>
+            )}
           </div>
         </div>
 
@@ -133,7 +124,7 @@ export default function PrediksiPage() {
                   <span>Tanggal prediksi: <strong>{result.tanggal_prediksi}</strong></span>
                   {result.arah_prediksi && (
                     <span>
-                      {arahIcon(result.arah_prediksi)} Arah: <strong>{result.arah_prediksi}</strong>
+                      Arah: <strong>{result.arah_prediksi}</strong>
                       {result.confidence_arah && ` (${result.confidence_arah.toFixed(1)}%)`}
                     </span>
                   )}
@@ -154,7 +145,7 @@ export default function PrediksiPage() {
               <div className="metric-card">
                 <div className="metric-label">Arah Pergerakan</div>
                 <div className="metric-value" style={{ fontSize: 20 }}>
-                  {arahIcon(result.arah_prediksi)} {result.arah_prediksi || "—"}
+                  {result.arah_prediksi || "—"}
                 </div>
                 <div className="metric-sub neutral">
                   Confidence: {result.confidence_arah ? `${result.confidence_arah.toFixed(1)}%` : "—"}

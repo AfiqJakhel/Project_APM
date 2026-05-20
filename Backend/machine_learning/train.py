@@ -43,7 +43,11 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from pathlib import Path
 from datetime import datetime
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import (
+    mean_absolute_error, mean_squared_error, r2_score,
+    accuracy_score, precision_score, recall_score, f1_score,
+    roc_curve, auc,                     # untuk kalibrasi threshold Youden's J
+)
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import RobustScaler
 from xgboost import XGBRegressor, XGBClassifier
@@ -459,7 +463,149 @@ def expanding_window_eval(df: pd.DataFrame,
 
 
 # =============================================================================
-# BAGIAN 9 — PLOT HASIL EXPANDING WINDOW
+# BAGIAN 8B — EXPANDING WINDOW EVALUATION UNTUK CLASSIFIER
+# =============================================================================
+def expanding_window_eval_classifier(df: pd.DataFrame,
+                                      windows: list[dict],
+                                      target_col: str,
+                                      label: str) -> pd.DataFrame:
+    """
+    Expanding Window Evaluation khusus untuk XGBClassifier arah pergerakan.
+
+    Pola fungsi sama dengan expanding_window_eval() — output format identik
+    sehingga dapat dibandingkan langsung. Perbedaan utama:
+      - Model   : XGBClassifier (binary:logistic) bukan XGBRegressor
+      - Metrik  : DA (Accuracy), AUC, Precision, Recall
+      - Baseline: Majority class (prediksi kelas terbanyak selalu)
+      - scale_pos_weight dihitung ulang dari data training tiap window
+
+    MIN_TRAIN_SIZE sama dengan expanding window regresi (MIN_TRAIN_DAYS=365)
+    untuk perbandingan yang adil antar model.
+
+    Args:
+        df        : DataFrame lengkap (sudah preprocessing)
+        windows   : List window dari buat_expanding_windows()
+        target_col: Kolom target regresi ("target_h1", dll)
+        label     : Horizon label ("h1", "h3", "h7")
+
+    Returns:
+        pd.DataFrame berisi DA per window (untuk deteksi concept drift classifier)
+    """
+    arah_col = f"arah_{target_col}"
+    log(f"\n[8B] Expanding Window Evaluation CLASSIFIER — {label.upper()} ({arah_col})")
+
+    if arah_col not in df.columns:
+        log(f"    ! Kolom {arah_col} tidak ditemukan, lewati evaluasi classifier.")
+        return pd.DataFrame()
+
+    log(f"    {'Win':<5} {'Train':>6} {'Test':>5}   Clf-DA%   Majority-DA%     AUC")
+    log(f"    {'─'*5} {'─'*6} {'─'*5}   {'─'*8}  {'─'*12}  {'─'*7}")
+
+    records = []
+
+    for w in windows:
+        win_id = w["window"]
+
+        df_tr = (df.iloc[w["train_start"]:w["train_end"]]
+                   .dropna(subset=[arah_col])
+                   .copy())
+        df_te = (df.iloc[w["test_start"]:w["test_end"]]
+                   .dropna(subset=[arah_col])
+                   .copy())
+
+        # Minimal 100 baris train dan 5 baris test (sama dengan regresi)
+        if len(df_tr) < 100 or len(df_te) < 5:
+            continue
+
+        X_train, y_train = pisahkan_fitur(df_tr, arah_col)
+        X_test,  y_test  = pisahkan_fitur(df_te, arah_col)
+
+        # ── Hitung scale_pos_weight dari window ini ──────────────────────
+        n_turun_w = int((y_train == 0).sum())
+        n_naik_w  = int((y_train == 1).sum())
+        spw_w     = n_turun_w / max(n_naik_w, 1)
+
+        # ── Latih XGBClassifier dengan validasi internal 90/10 ───────────
+        try:
+            split_int = max(int(len(X_train) * 0.9), len(X_train) - 60)
+            X_tr_int  = X_train.iloc[:split_int]
+            X_v_int   = X_train.iloc[split_int:]
+            y_tr_int  = y_train.iloc[:split_int]
+            y_v_int   = y_train.iloc[split_int:]
+
+            clf_w = XGBClassifier(
+                objective             = "binary:logistic",
+                tree_method           = "hist",
+                random_state          = RANDOM_STATE,
+                verbosity             = 0,
+                eval_metric           = "aucpr",
+                early_stopping_rounds = 30,
+                n_estimators          = 500,
+                max_depth             = 4,
+                learning_rate         = 0.05,
+                subsample             = 0.8,
+                colsample_bytree      = 0.8,
+                scale_pos_weight      = spw_w,
+            )
+            clf_w.fit(X_tr_int, y_tr_int,
+                      eval_set=[(X_v_int, y_v_int)],
+                      verbose=False)
+
+            y_prob_w = clf_w.predict_proba(X_test)[:, 1]
+            # Threshold 0.5 untuk per-window (kalibrasi Youden's J hanya di model final)
+            y_pred_w = (y_prob_w >= 0.5).astype(int)
+
+            da_clf = float(accuracy_score(y_test, y_pred_w) * 100)
+            fpr_w, tpr_w, _ = roc_curve(y_test, y_prob_w)
+            auc_w  = float(auc(fpr_w, tpr_w))
+
+        except Exception as e:
+            log(f"    ! Window {win_id} Classifier error: {e}")
+            continue
+
+        # ── Majority class baseline ──────────────────────────────────────
+        kelas_mayoritas = int(y_train.mode()[0])
+        y_pred_majority = np.full(len(y_test), kelas_mayoritas, dtype=int)
+        da_majority     = float(accuracy_score(y_test, y_pred_majority) * 100)
+
+        records.append({
+            "window"              : win_id,
+            "tanggal_test_mulai"  : w["tanggal_test_mulai"].date(),
+            "tanggal_test_selesai": w["tanggal_test_selesai"].date(),
+            "n_train"             : len(df_tr),
+            "n_test"              : len(df_te),
+            "spw"                 : round(spw_w, 3),
+            "clf_DA"              : round(da_clf, 2),
+            "majority_DA"         : round(da_majority, 2),
+            "auc"                 : round(auc_w, 4),
+        })
+
+        log(
+            f"    {win_id:<5} {len(df_tr):>6} {len(df_te):>5}   "
+            f"{da_clf:>7.1f}%   {da_majority:>11.1f}%   {auc_w:.4f}"
+        )
+
+    df_results = pd.DataFrame(records)
+
+    if len(df_results) > 0:
+        log(f"\n    ── Ringkasan Classifier {label.upper()} ─────────────────────────")
+        log(f"    Classifier  DA : {df_results['clf_DA'].mean():.2f}% "
+            f"± {df_results['clf_DA'].std():.2f}%")
+        log(f"    Majority    DA : {df_results['majority_DA'].mean():.2f}%")
+        log(f"    Mean AUC      : {df_results['auc'].mean():.4f}")
+
+        beat_majority = (
+            df_results["clf_DA"] > df_results["majority_DA"]
+        ).mean() * 100
+        log(f"    Classifier mengalahkan Majority: {beat_majority:.1f}% dari window")
+        if beat_majority < 60:
+            log("    ! PERINGATAN: Classifier kalah dari majority vote di "
+                f"{100-beat_majority:.0f}% window. "
+                "Pertimbangkan feature engineering tambahan.")
+
+    return df_results
+
+
 # =============================================================================
 def plot_expanding_window(df_results: pd.DataFrame, label: str) -> None:
     """
@@ -705,55 +851,132 @@ def latih_model_klasifikasi(df: pd.DataFrame, target_col: str, label: str) -> No
     """
     Melatih model klasifikasi (XGBClassifier) untuk memprediksi arah pergerakan harga.
     Target: 1 (Naik), 0 (Turun/Tetap).
+
+    Perbaikan v2:
+    - scale_pos_weight dihitung dari distribusi aktual data training
+    - eval_metric diganti ke "aucpr" (lebih sensitif untuk imbalance dari logloss)
+    - Threshold optimal dikalibrasi dengan Youden's J Statistic
+    - DA dari classifier (bukan DA regresi) dilaporkan secara eksplisit
     """
     log(f"\n[11C] Melatih model KLASIFIKASI (Arah Pergerakan) — {label.upper()}...")
-    
+
     arah_target_col = f"arah_{target_col}"
     if arah_target_col not in df.columns:
         log(f"    ! Kolom target klasifikasi {arah_target_col} tidak ditemukan.")
         return
-        
+
     df_valid = df.dropna(subset=[arah_target_col]).copy()
     X, y = pisahkan_fitur(df_valid, arah_target_col)
-    
-    # Split train & test (80% train, 20% hold-out untuk evaluasi)
+
+    # Split train & test (80% train, 20% hold-out) — berbasis waktu
     split_val = int(len(X) * 0.8)
     X_tr, X_val = X.iloc[:split_val], X.iloc[split_val:]
     y_tr, y_val = y.iloc[:split_val], y.iloc[split_val:]
-    
+
+    # ── Hitung class imbalance dari data training ────────────────────────
+    n_turun = int((y_tr == 0).sum())
+    n_naik  = int((y_tr == 1).sum())
+    spw     = n_turun / max(n_naik, 1)  # scale_pos_weight
+    label_imbalance = 'seimbang' if 0.7 <= spw <= 1.3 else 'imbalanced — scale_pos_weight aktif'
+    log(f"    -> Distribusi train : Turun/Tetap={n_turun}, Naik={n_naik}")
+    log(f"    -> scale_pos_weight : {spw:.3f} ({label_imbalance})")
+
+    # ── Latih dengan imbalance handling ──────────────────────────────────
     model = XGBClassifier(
-        objective="binary:logistic",
-        tree_method="hist",
-        random_state=RANDOM_STATE,
-        verbosity=0,
-        eval_metric="logloss",
-        early_stopping_rounds=30,
-        n_estimators=300,
-        max_depth=5,
-        learning_rate=0.05
+        objective             = "binary:logistic",
+        tree_method           = "hist",
+        random_state          = RANDOM_STATE,
+        verbosity             = 0,
+        eval_metric           = "aucpr",   # lebih sensitif dari logloss untuk imbalance
+        early_stopping_rounds = 30,
+        n_estimators          = 500,       # dinaikkan dari 300
+        max_depth             = 4,         # dikurangi dari 5 (cegah overfit)
+        learning_rate         = 0.05,
+        subsample             = 0.8,
+        colsample_bytree      = 0.8,
+        scale_pos_weight      = spw,       # kunci handling imbalance
     )
     model.fit(
         X_tr, y_tr,
-        eval_set=[(X_tr, y_tr), (X_val, y_val)],
+        eval_set=[(X_val, y_val)],         # hanya val set untuk early stopping
         verbose=False,
     )
-    
-    # Evaluasi pada hold-out set
-    y_pred = model.predict(X_val)
-    acc = accuracy_score(y_val, y_pred)
+
+    # ── Kalibrasi threshold optimal (Youden's J) ─────────────────────────
+    optimal_thr = kalibrasi_threshold(model, X_val, y_val, label, MODEL_DIR)
+
+    # ── Evaluasi dengan threshold optimal ────────────────────────────────
+    y_prob    = model.predict_proba(X_val)[:, 1]
+    y_pred    = (y_prob >= optimal_thr).astype(int)
+
+    acc  = accuracy_score(y_val, y_pred)
     prec = precision_score(y_val, y_pred, zero_division=0)
-    rec = recall_score(y_val, y_pred, zero_division=0)
-    f1 = f1_score(y_val, y_pred, zero_division=0)
-    
-    log(f"    -> Accuracy : {acc*100:.2f}%")
-    log(f"    -> Precision: {prec*100:.2f}%")
-    log(f"    -> Recall   : {rec*100:.2f}%")
-    log(f"    -> F1-Score : {f1*100:.2f}%")
-    
-    # Simpan model klasifikasi
+    rec  = recall_score(y_val, y_pred, zero_division=0)
+    f1   = f1_score(y_val, y_pred, zero_division=0)
+
+    log(f"    -> Threshold digunakan : {optimal_thr:.3f} (Youden's J)")
+    log(f"    -> DA (Accuracy)       : {acc*100:.2f}%")
+    log(f"    -> Precision           : {prec*100:.2f}%")
+    log(f"    -> Recall              : {rec*100:.2f}%")
+    log(f"    -> F1-Score            : {f1*100:.2f}%")
+
+    # ── Simpan model klasifikasi ──────────────────────────────────────────
     path = MODEL_DIR / f"model_arah_{label}.pkl"
     joblib.dump(model, path)
     log(f"    -> Model klasifikasi {path.name} disimpan.")
+
+
+# =============================================================================
+# BAGIAN 11D — KALIBRASI THRESHOLD DENGAN YOUDEN'S J STATISTIC
+# =============================================================================
+def kalibrasi_threshold(model, X_val: pd.DataFrame, y_val: pd.Series,
+                         label: str, model_dir: Path) -> float:
+    """
+    Hitung threshold klasifikasi optimal menggunakan Youden's J Statistic.
+    Youden's J = TPR - FPR, dioptimalkan sehingga threshold menyeimbangkan
+    sensitivitas (menangkap hari naik) dan spesifisitas (menangkap hari turun).
+
+    Threshold disimpan ke thresholds.json agar predictor.py dapat membacanya
+    tanpa hardcode. Format JSON: {"h1": {"threshold": 0.48, ...}, ...}
+
+    Args:
+        model    : XGBClassifier yang sudah difit
+        X_val    : Fitur hold-out set
+        y_val    : Label arah aktual hold-out set (0/1)
+        label    : Horizon label ("h1", "h3", "h7")
+        model_dir: Path folder model untuk menyimpan thresholds.json
+
+    Returns:
+        optimal_thr (float): threshold optimal untuk horizon ini
+    """
+    y_prob = model.predict_proba(X_val)[:, 1]
+    fpr, tpr, thresholds = roc_curve(y_val, y_prob)
+
+    # Hitung Youden's J untuk setiap threshold di kurva ROC
+    youden_j    = tpr - fpr
+    optimal_idx = int(np.argmax(youden_j))
+    optimal_thr = float(thresholds[optimal_idx])
+
+    # Clip ke rentang wajar — hindari threshold ekstrem 0.0 atau 1.0
+    optimal_thr = float(np.clip(optimal_thr, 0.30, 0.75))
+
+    # ── Simpan ke thresholds.json (append per label) ─────────────────────
+    thr_path = model_dir / "thresholds.json"
+    existing  = json.loads(thr_path.read_text()) if thr_path.exists() else {}
+    existing[label] = {
+        "threshold"  : optimal_thr,
+        "youden_j"   : float(youden_j[optimal_idx]),
+        "tpr_optimal": float(tpr[optimal_idx]),
+        "fpr_optimal": float(fpr[optimal_idx]),
+        "n_val"      : int(len(y_val)),
+    }
+    thr_path.write_text(json.dumps(existing, indent=2))
+
+    log(f"    -> Threshold optimal   : {optimal_thr:.3f} "
+        f"(J={youden_j[optimal_idx]:.3f}, "
+        f"TPR={tpr[optimal_idx]:.3f}, FPR={fpr[optimal_idx]:.3f})")
+    log(f"    -> thresholds.json     : diperbarui untuk label '{label}'")
+    return optimal_thr
 
 
 # =============================================================================
@@ -795,13 +1018,50 @@ def evaluasi_model_final(df: pd.DataFrame, target_col: str,
 
     metrik = hitung_semua_metrik(y_true, y_pred)
 
+    # ── DA dari XGBClassifier (lebih akurat dari DA regresi) ─────────────────
+    # DA regresi = sign(diff prediksi) vs sign(diff aktual) → mudah off-by-one
+    # DA classifier = prediksi langsung label naik/turun → lebih representatif
+    arah_target_col = f"arah_{target_col}"
+    da_classifier   = float("nan")
+
+    if arah_target_col in df_holdout.columns:
+        try:
+            clf_path = MODEL_DIR / f"model_arah_{label}.pkl"
+            thr_path = MODEL_DIR / "thresholds.json"
+
+            if clf_path.exists():
+                clf          = joblib.load(clf_path)
+                y_arah_true  = df_holdout[arah_target_col].dropna().astype(int)
+                # Selaraskan indeks X_hold dengan baris yang punya label arah valid
+                X_hold_arah  = X_hold.loc[y_arah_true.index]
+
+                # Baca threshold optimal dari JSON (fallback ke 0.5 jika belum ada)
+                if thr_path.exists():
+                    thr_data = json.loads(thr_path.read_text())
+                    thr_val  = thr_data.get(label, {}).get("threshold", 0.5)
+                else:
+                    thr_val  = 0.5
+
+                y_prob_arah  = clf.predict_proba(X_hold_arah)[:, 1]
+                y_pred_arah  = (y_prob_arah >= thr_val).astype(int)
+                da_classifier = float(
+                    accuracy_score(y_arah_true.values, y_pred_arah) * 100
+                )
+                log(f"    -> DA (Classifier) : {da_classifier:>8.1f}%  "
+                    f"(threshold={thr_val:.3f}) ← angka utama untuk laporan")
+            else:
+                log(f"    ! Model klasifikasi {label} belum ada — latih dulu "
+                    f"dengan latih_model_klasifikasi()")
+        except Exception as _e:
+            log(f"    ! Gagal hitung DA classifier: {_e}")
+
     log(f"    -> Hold-out: {holdout_n} hari ({tgl_mulai} s/d {tgl_selesai})")
     log(f"    -> MAE    : Rp {metrik['MAE']:>10,.0f}")
     log(f"    -> RMSE   : Rp {metrik['RMSE']:>10,.0f}")
     log(f"    -> MAPE   : {metrik['MAPE']:>8.2f}%")
     log(f"    -> sMAPE  : {metrik['sMAPE']:>8.2f}%")
     log(f"    -> R²     : {metrik['R2']:>8.4f}")
-    log(f"    -> DA     : {metrik['DA']:>8.1f}%")
+    log(f"    -> DA (Regresi) : {metrik['DA']:>8.1f}%  ← dari selisih regresi")
 
     # ── Plot prediksi vs aktual pada hold-out ────────────────────────────────
     fig, ax = plt.subplots(figsize=(13, 5))
@@ -812,10 +1072,14 @@ def evaluasi_model_final(df: pd.DataFrame, target_col: str,
             linestyle="--", label="Prediksi Model Final", zorder=3)
     ax.fill_between(tgl_plot, y_true, y_pred,
                     alpha=0.15, color="#1976D2", label="Selisih error")
+
+    # Judul plot menampilkan kedua DA (regresi + classifier)
+    da_clf_str = f"{da_classifier:.1f}%" if not np.isnan(da_classifier) else "N/A"
     ax.set_title(
         f"Evaluasi Model Final {label.upper()} — Hold-out 20% Data Terakhir\n"
         f"MAE: Rp {metrik['MAE']:,.0f} | MAPE: {metrik['MAPE']:.2f}% | "
-        f"R²: {metrik['R2']:.4f} | DA: {metrik['DA']:.1f}%",
+        f"R²: {metrik['R2']:.4f} | DA-Regresi: {metrik['DA']:.1f}% | "
+        f"DA-Classifier: {da_clf_str}",
         fontsize=11, fontweight="bold"
     )
     ax.set_ylabel("Harga Cabai Merah (Rp)")
@@ -832,20 +1096,23 @@ def evaluasi_model_final(df: pd.DataFrame, target_col: str,
 
     # ── Simpan metrik ke CSV ─────────────────────────────────────────────────
     pd.DataFrame([{
-        "label"        : label.upper(),
-        "target"       : target_col,
-        "holdout_n"    : holdout_n,
-        "tgl_mulai"    : str(tgl_mulai),
-        "tgl_selesai"  : str(tgl_selesai),
-        "MAE"          : round(metrik["MAE"], 2),
-        "RMSE"         : round(metrik["RMSE"], 2),
-        "MAPE_%"       : round(metrik["MAPE"], 4),
-        "sMAPE_%"      : round(metrik["sMAPE"], 4),
-        "R2"           : round(metrik["R2"], 6),
-        "DA_%"         : round(metrik["DA"], 2),
+        "label"             : label.upper(),
+        "target"            : target_col,
+        "holdout_n"         : holdout_n,
+        "tgl_mulai"         : str(tgl_mulai),
+        "tgl_selesai"       : str(tgl_selesai),
+        "MAE"               : round(metrik["MAE"], 2),
+        "RMSE"              : round(metrik["RMSE"], 2),
+        "MAPE_%"            : round(metrik["MAPE"], 4),
+        "sMAPE_%"           : round(metrik["sMAPE"], 4),
+        "R2"                : round(metrik["R2"], 6),
+        "DA_%"              : round(metrik["DA"], 2),
+        "DA_classifier_%"   : round(da_classifier, 2) if not np.isnan(da_classifier) else None,
     }]).to_csv(METRICS_DIR / f"evaluasi_final_{label}.csv", index=False)
     log(f"    -> evaluasi_final_{label}.csv disimpan")
 
+    # Tambahkan DA classifier ke dict metrik untuk diteruskan ke ringkasan akhir
+    metrik["DA_classifier"] = da_classifier
     return metrik
 
 # =============================================================================
@@ -1004,17 +1271,27 @@ def main():
         # ── Tuning sekali ──────────────────────────────────────────────────
         params = tuning_final(df, target_col, label, horizon_days)
 
-        # ── Expanding window evaluation ────────────────────────────────────
+        # ── Expanding window evaluation (REGRESI) ─────────────────────────
         df_results = expanding_window_eval(df, windows, target_col, label, params)
 
-        # ── Simpan hasil per window ────────────────────────────────────────
+        # ── Simpan hasil per window regresi ───────────────────────────────
         if len(df_results) > 0:
             out_csv = METRICS_DIR / f"hasil_window_{label}.csv"
             df_results.to_csv(out_csv, index=False)
             log(f"    -> hasil_window_{label}.csv disimpan ({len(df_results)} windows)")
 
-        # ── Plot ───────────────────────────────────────────────────────────
+        # ── Plot regresi ───────────────────────────────────────────────────
         plot_expanding_window(df_results, label)
+
+        # ── Expanding window evaluation (CLASSIFIER) ──────────────────────
+        df_clf_results = expanding_window_eval_classifier(
+            df, windows, target_col, label
+        )
+        if len(df_clf_results) > 0:
+            out_csv_clf = METRICS_DIR / f"hasil_window_classifier_{label}.csv"
+            df_clf_results.to_csv(out_csv_clf, index=False)
+            log(f"    -> hasil_window_classifier_{label}.csv disimpan "
+                f"({len(df_clf_results)} windows)")
 
         all_results[label] = df_results
 
@@ -1037,6 +1314,10 @@ def main():
 
         model_final, feature_cols = latih_model_final(df, target_col, label, p)
 
+        # ── PERBAIKAN: Latih model KLASIFIKASI ───────────
+        # Harus dilatih SEBELUM dievaluasi agar evaluasi_final membaca model yang benar
+        latih_model_klasifikasi(df, target_col, label)
+
         # ── PERBAIKAN 2: Evaluasi model final pada hold-out 20% ───────────
         metrik_final = evaluasi_model_final(df, target_col, label, model_final)
         if metrik_final:
@@ -1047,41 +1328,40 @@ def main():
         X_all, _ = pisahkan_fitur(df_valid, target_col)
         shap_final(model_final, X_all, label)
 
-        # ── PERBAIKAN: Latih model KLASIFIKASI ───────────
-        latih_model_klasifikasi(df, target_col, label)
-
     # ── Laporan ringkasan ─────────────────────────────────────────────────────
     laporan_ringkasan(all_results)
 
     # ── PERBAIKAN 2: Tampilkan ringkasan evaluasi hold-out semua model ────────
     if holdout_results:
-        log(f"\n{'═'*65}")
+        log(f"\n{'═'*75}")
         log("  EVALUASI MODEL FINAL — HOLD-OUT 20% DATA TERAKHIR")
         log("  (Angka ini yang digunakan sebagai akurasi di laporan)")
-        log(f"{'═'*65}")
-        log(f"  {'Model':<6} {'MAE':>14} {'RMSE':>14} {'MAPE':>10} {'sMAPE':>10} {'R²':>8} {'DA%':>8}")
-        log(f"  {'─'*6} {'─'*14} {'─'*14} {'─'*10} {'─'*10} {'─'*8} {'─'*8}")
+        log(f"{'═'*75}")
+        log(f"  {'Model':<6} {'MAE':>14} {'RMSE':>14} {'MAPE':>10} {'sMAPE':>10} {'R²':>8} {'DA-Clf%':>9}")
+        log(f"  {'─'*6} {'─'*14} {'─'*14} {'─'*10} {'─'*10} {'─'*8} {'─'*9}")
         for lbl, m in holdout_results.items():
+            da_clf_str = f"{m.get('DA_classifier', float('nan')):>8.1f}%" if pd.notna(m.get('DA_classifier')) else "      N/A"
             log(f"  {lbl.upper():<6} "
                 f"Rp {m['MAE']:>10,.0f} "
                 f"Rp {m['RMSE']:>10,.0f} "
                 f"{m['MAPE']:>9.2f}% "
                 f"{m['sMAPE']:>9.2f}% "
                 f"{m['R2']:>8.4f} "
-                f"{m['DA']:>7.1f}%")
-        log(f"{'═'*65}")
+                f"{da_clf_str}")
+        log(f"{'═'*75}")
 
         # Simpan ringkasan hold-out ke CSV
         rows = []
         for lbl, m in holdout_results.items():
             rows.append({
-                "model"  : lbl.upper(),
-                "MAE"    : round(m["MAE"], 2),
-                "RMSE"   : round(m["RMSE"], 2),
-                "MAPE_%" : round(m["MAPE"], 4),
-                "sMAPE_%": round(m["sMAPE"], 4),
-                "R2"     : round(m["R2"], 6),
-                "DA_%"   : round(m["DA"], 2),
+                "model"          : lbl.upper(),
+                "MAE"            : round(m["MAE"], 2),
+                "RMSE"           : round(m["RMSE"], 2),
+                "MAPE_%"         : round(m["MAPE"], 4),
+                "sMAPE_%"        : round(m["sMAPE"], 4),
+                "R2"             : round(m["R2"], 6),
+                "DA_%"           : round(m["DA"], 2),  # DA Regresi
+                "DA_classifier_%": round(m.get("DA_classifier", float('nan')), 2) if pd.notna(m.get("DA_classifier")) else None,
             })
         pd.DataFrame(rows).to_csv(
             METRICS_DIR / "ringkasan_evaluasi_final.csv", index=False

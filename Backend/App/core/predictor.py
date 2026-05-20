@@ -34,6 +34,7 @@ SCALER_DIR = BASE_DIR / "machine_learning" / "output" / "xgboost_models"
 SCALER_PATH = SCALER_DIR / "scaler.pkl"
 DATA_DIR = BASE_DIR / "data" / "processed"
 METRICS_DIR = MODEL_DIR / "metrics"
+THR_PATH    = MODEL_DIR / "thresholds.json"   # threshold Youden's J dari training
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -269,38 +270,83 @@ def get_dataset() -> pd.DataFrame:
 # BAGIAN 2 — FUNGSI PREDIKSI UTAMA
 # =============================================================================
 
+# Threshold default jika thresholds.json belum ada (konservatif, sebelum training)
+_DEFAULT_THRESHOLDS: dict = {"h1": 0.50, "h3": 0.50, "h7": 0.50}
+
+
+def _load_thresholds() -> dict:
+    """
+    Muat threshold optimal per horizon dari thresholds.json.
+    File ini dibuat oleh train.py menggunakan Youden's J Statistic.
+    Jika file belum ada, kembalikan threshold default (0.5).
+    Hasil di-cache agar tidak baca file tiap request.
+    """
+    # Gunakan cache yang sudah ada di _CACHE
+    if "thresholds" in _CACHE:
+        return _CACHE["thresholds"]
+
+    if THR_PATH.exists():
+        try:
+            data = json.loads(THR_PATH.read_text())
+            # Ekstrak nilai threshold saja dari setiap entry
+            result = {
+                k: v["threshold"] if isinstance(v, dict) else float(v)
+                for k, v in data.items()
+                if k in ["h1", "h3", "h7"]
+            }
+            # Isi horizon yang tidak ada dengan default
+            for lbl in ["h1", "h3", "h7"]:
+                result.setdefault(lbl, _DEFAULT_THRESHOLDS[lbl])
+            _CACHE["thresholds"] = result
+            logger.info(f"Thresholds dimuat dari {THR_PATH.name}: {result}")
+            return result
+        except Exception as e:
+            logger.warning(f"Gagal membaca thresholds.json: {e}. Pakai default.")
+
+    logger.warning("thresholds.json belum ada — pakai threshold default 0.5. "
+                   "Jalankan train.py untuk membuat file ini.")
+    return _DEFAULT_THRESHOLDS.copy()
+
+
 def prediksi_arah(df_input: pd.DataFrame, label: str) -> dict:
     """
     Prediksi arah pergerakan harga menggunakan XGBClassifier.
     Target 1 (Naik), 0 (Turun/Tetap).
+
+    Threshold dibaca dari thresholds.json (dikalibrasi Youden's J saat training),
+    bukan hardcode, agar tidak perlu edit kode ketika threshold berubah.
     """
     model = load_model_arah(label)
     if not model:
         return {"arah_prediksi": None, "confidence_arah": None}
-    
+
     try:
-        # predict_proba returns probability of class 0 and class 1
         probs = model.predict_proba(df_input)[0]
-        # Jika hanya 1 class yang ada (jarang terjadi di model normal, tapi aman dicek)
         if len(probs) > 1:
             prob_naik = float(probs[1])
         else:
             prob_naik = float(probs[0]) if model.classes_[0] == 1 else 0.0
-            
-        if prob_naik > 0.5:
-            arah = "naik"
+
+        # ── Baca threshold optimal dari thresholds.json ───────────────────
+        thresholds = _load_thresholds()
+        thr        = thresholds.get(label, 0.50)
+        zona_stabil = 0.08  # ±8% dari threshold → zona "stabil"
+
+        if prob_naik >= thr + zona_stabil:
+            arah       = "naik"
             confidence = prob_naik * 100
-        elif prob_naik < 0.4:
-            arah = "turun"
+        elif prob_naik <= thr - zona_stabil:
+            arah       = "turun"
             confidence = (1 - prob_naik) * 100
         else:
-            arah = "stabil"
-            # Confidence untuk stabil: kedekatan ke 0.45
-            confidence = (1 - abs(prob_naik - 0.45) * 2) * 100
-            
+            arah       = "stabil"
+            # Confidence stabil: seberapa dekat ke tengah zona stabil
+            confidence = (1 - abs(prob_naik - thr) / zona_stabil) * 100
+            confidence = max(0.0, min(100.0, confidence))
+
         return {
-            "arah_prediksi": arah,
-            "confidence_arah": round(confidence, 2)
+            "arah_prediksi"  : arah,
+            "confidence_arah": round(confidence, 2),
         }
     except Exception as e:
         logger.error(f"Error saat memprediksi arah: {e}")
@@ -562,8 +608,9 @@ def get_metrik_model() -> dict:
                 "MAPE" : get_col_value(row, ["MAPE_%", "MAPE_pct", "MAPE", "mape"]),
                 "sMAPE": get_col_value(row, ["sMAPE_%", "sMAPE_pct", "sMAPE", "smape"]),
                 "R2"   : get_col_value(row, ["R2", "r2", "R_squared", "R²"]),
-                # FIX 3: DA bisa "DA_%", "DA_pct", atau "DA"
-                "DA"   : get_col_value(row, ["DA_%", "DA_pct", "DA", "da",
+                # FIX 3: DA memprioritaskan DA_classifier_% 
+                "DA"   : get_col_value(row, ["DA_classifier_%", "DA_classifier",
+                                              "DA_%", "DA_pct", "DA", "da",
                                               "Directional_Accuracy"]),
             }
 

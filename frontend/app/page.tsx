@@ -13,15 +13,6 @@ import {
   type MetrikResponse,
 } from "./lib/api";
 
-/* ──────────── SVG Icon helpers ──────────── */
-const IconAlert = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
-
 /* ──────────── Feature importance (static — from model) ──────────── */
 const features = [
   { label: "Lag harga 1 hari", pct: 34.2, barClass: "bar-green" },
@@ -52,9 +43,9 @@ function formatDate(dateStr: string): string {
 }
 
 function trendLabel(tren: string): string {
-  if (tren === "naik") return "▲ Naik";
-  if (tren === "turun") return "▼ Turun";
-  return "● Stabil";
+  if (tren === "naik") return "Naik";
+  if (tren === "turun") return "Turun";
+  return "Stabil";
 }
 
 function statusInflasiColor(status: string): string {
@@ -151,9 +142,6 @@ export default function Home() {
         {/* Error State */}
         {error && !loading && (
           <div className="alert-box animate-in delay-1" style={{ borderColor: "var(--red-muted)", background: "var(--red-light)" }}>
-            <span className="alert-icon" style={{ color: "#E24B4A" }}>
-              <IconAlert />
-            </span>
             <p className="alert-text">
               <strong>Error:</strong> {error}
             </p>
@@ -165,9 +153,6 @@ export default function Home() {
             {/* Alert Box */}
             {dashboard && dashboard.status_inflasi !== "normal" && (
               <div className="alert-box animate-in delay-1">
-                <span className="alert-icon" style={{ color: "#E24B4A" }}>
-                  <IconAlert />
-                </span>
                 <p className="alert-text">
                   <strong>Peringatan dini:</strong> Prediksi menunjukkan harga cabai
                   dalam status <strong>{dashboard.status_inflasi}</strong>. Tren harga{" "}

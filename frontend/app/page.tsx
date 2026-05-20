@@ -1,47 +1,19 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import PriceChart from "./components/PriceChart";
+import {
+  fetchDashboard,
+  fetchHistoris,
+  fetchPrediksiAll,
+  fetchMetrik,
+  type DashboardResponse,
+  type HistorisDataPoint,
+  type PrediksiItem,
+  type MetrikResponse,
+} from "./lib/api";
 
 /* ──────────── SVG Icon helpers ──────────── */
-const IconDashboard = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="7" height="7" rx="1" />
-    <rect x="14" y="3" width="7" height="7" rx="1" />
-    <rect x="3" y="14" width="7" height="7" rx="1" />
-    <rect x="14" y="14" width="7" height="7" rx="1" />
-  </svg>
-);
-const IconTrend = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-    <polyline points="16 7 22 7 22 13" />
-  </svg>
-);
-const IconHistory = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
-  </svg>
-);
-const IconCompare = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="20" x2="18" y2="10" />
-    <line x1="12" y1="20" x2="12" y2="4" />
-    <line x1="6" y1="20" x2="6" y2="14" />
-  </svg>
-);
-const IconReport = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="16" y1="13" x2="8" y2="13" />
-    <line x1="16" y1="17" x2="8" y2="17" />
-  </svg>
-);
-const IconBell = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-);
 const IconAlert = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -49,25 +21,8 @@ const IconAlert = () => (
     <line x1="12" y1="17" x2="12.01" y2="17" />
   </svg>
 );
-const IconLeaf = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M11 20A7 7 0 0 1 9.8 6.9C15.5 4.9 17 3.5 19 2c1 2 2 4.5 2 8 0 5.5-4.8 10-10 10Z" />
-    <path d="M2 21c0-3 1.9-5.5 4.5-6.5" />
-  </svg>
-);
 
-/* ──────────── Prediction data ──────────── */
-const predictions = [
-  { date: "28 Apr", price: "Rp 43.800", pct: "+3%", color: "badge-yellow" },
-  { date: "29 Apr", price: "Rp 44.500", pct: "+5%", color: "badge-yellow" },
-  { date: "30 Apr", price: "Rp 45.900", pct: "+8%", color: "badge-red" },
-  { date: "1 Mei", price: "Rp 47.200", pct: "+11%", color: "badge-red" },
-  { date: "2 Mei", price: "Rp 48.600", pct: "+14%", color: "badge-red" },
-  { date: "3 Mei", price: "Rp 49.300", pct: "+16%", color: "badge-red" },
-  { date: "4 Mei", price: "Rp 50.100", pct: "+18%", color: "badge-red" },
-];
-
-/* ──────────── Feature importance data ──────────── */
+/* ──────────── Feature importance (static — from model) ──────────── */
 const features = [
   { label: "Lag harga 1 hari", pct: 34.2, barClass: "bar-green" },
   { label: "Lag harga 7 hari", pct: 22.7, barClass: "bar-teal" },
@@ -77,252 +32,339 @@ const features = [
   { label: "Bulan (musiman)", pct: 5.4, barClass: "bar-pink" },
 ];
 
-/* ──────────── Table data ──────────── */
-const tableData = [
-  { tanggal: "27 Apr", komoditas: "CMK", harga: "42.500", status: "Naik", statusClass: "status-naik" },
-  { tanggal: "27 Apr", komoditas: "CRM", harga: "38.000", status: "Naik", statusClass: "status-naik" },
-  { tanggal: "26 Apr", komoditas: "CMK", harga: "38.500", status: "+2%", statusClass: "status-plus" },
-  { tanggal: "26 Apr", komoditas: "CRM", harga: "35.500", status: "Stabil", statusClass: "status-stabil" },
-  { tanggal: "25 Apr", komoditas: "CMK", harga: "36.100", status: "Stabil", statusClass: "status-stabil" },
-  { tanggal: "25 Apr", komoditas: "CRM", harga: "33.000", status: "Stabil", statusClass: "status-stabil" },
-];
+/* ──────────── Helpers ──────────── */
+function formatRp(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return `Rp ${value.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
+}
+
+function formatDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function trendLabel(tren: string): string {
+  if (tren === "naik") return "▲ Naik";
+  if (tren === "turun") return "▼ Turun";
+  return "● Stabil";
+}
+
+function statusInflasiColor(status: string): string {
+  if (status === "kritis") return "badge-red";
+  if (status === "waspada") return "badge-yellow";
+  return "badge-green";
+}
 
 /* ══════════════════════════════════════════
-   PAGE COMPONENT
+   DASHBOARD PAGE
    ══════════════════════════════════════════ */
 export default function Home() {
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [historis, setHistoris] = useState<HistorisDataPoint[]>([]);
+  const [prediksi, setPrediksi] = useState<PrediksiItem[]>([]);
+  const [metrik, setMetrik] = useState<MetrikResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [dashData, histData, predData, metrikData] = await Promise.allSettled([
+          fetchDashboard(),
+          fetchHistoris(60),
+          fetchPrediksiAll(),
+          fetchMetrik(),
+        ]);
+
+        if (dashData.status === "fulfilled") setDashboard(dashData.value);
+        if (histData.status === "fulfilled") setHistoris(histData.value.data);
+        if (predData.status === "fulfilled") setPrediksi(predData.value.prediksi);
+        if (metrikData.status === "fulfilled") setMetrik(metrikData.value);
+
+        // If all failed, show error
+        if (
+          dashData.status === "rejected" &&
+          histData.status === "rejected" &&
+          predData.status === "rejected"
+        ) {
+          setError("Tidak bisa terhubung ke backend. Pastikan server FastAPI berjalan di localhost:8000");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  // Chart data from historis
+  const chartLabels = historis.map((d) => {
+    const dt = new Date(d.tanggal);
+    return `${dt.getDate()}/${dt.getMonth() + 1}`;
+  });
+  const chartData = historis.map((d) => d.harga_cabai_merah);
+
+  // Get R² from metrik
+  const r2Value = metrik?.metrik?.h1?.R2;
+
   return (
-    <div className="dashboard-shell">
-      {/* ── SIDEBAR ── */}
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <IconLeaf />
-          </div>
-          <div className="sidebar-brand">
-            <span className="sidebar-brand-name">CabaiWatch</span>
-            <span className="sidebar-brand-sub">Padang · 2026</span>
-          </div>
-        </div>
-
-        <nav className="sidebar-section">
-          <div className="sidebar-section-label">Menu Utama</div>
-          <ul className="sidebar-menu">
-            <li className="sidebar-menu-item active">
-              <IconDashboard /> Dashboard
-            </li>
-            <li className="sidebar-menu-item">
-              <IconTrend /> Prediksi harga
-            </li>
-            <li className="sidebar-menu-item">
-              <IconHistory /> Data historis
-            </li>
-            <li className="sidebar-menu-item">
-              <IconCompare /> Perbandingan model
-            </li>
-          </ul>
-        </nav>
-
-        <nav className="sidebar-section">
-          <div className="sidebar-section-label">Laporan</div>
-          <ul className="sidebar-menu">
-            <li className="sidebar-menu-item">
-              <IconReport /> Rekap harian
-            </li>
-            <li className="sidebar-menu-item">
-              <IconBell /> Riwayat alert
-            </li>
-          </ul>
-        </nav>
-
-        <div className="sidebar-footer">
-          <p className="sidebar-footer-text">
-            Sumber data: PIHPS BI · BMKG · SKB 3 Menteri
+    <>
+      {/* Top Bar */}
+      <header className="topbar">
+        <div className="topbar-left">
+          <h1>Dashboard monitoring harga cabai</h1>
+          <p>
+            {dashboard
+              ? `Diperbarui: ${formatDate(dashboard.tanggal_update)}, 08.00 WIB · Pasar Tradisional · Kota Padang`
+              : "Memuat data..."}
           </p>
         </div>
-      </aside>
+        <div className="topbar-right">
+          {dashboard && (
+            <span className={`badge ${statusInflasiColor(dashboard.status_inflasi)}`} style={{ fontSize: 11, padding: "5px 12px" }}>
+              Status: {dashboard.status_inflasi.toUpperCase()}
+            </span>
+          )}
+        </div>
+      </header>
 
-      {/* ── MAIN CONTENT ── */}
-      <main className="main-content">
-        {/* Top Bar */}
-        <header className="topbar">
-          <div className="topbar-left">
-            <h1>Dashboard monitoring harga cabai</h1>
-            <p>
-              Diperbarui: 27 April 2026, 08.00 WIB · Pasar Tradisional · Kota Padang
-            </p>
+      <div className="content-area">
+        {/* Loading State */}
+        {loading && (
+          <div className="loading-container animate-in delay-1">
+            <div className="loading-spinner" />
+            <p>Memuat data dashboard...</p>
           </div>
-          <div className="topbar-right">
-            <div className="pill-toggle">
-              <button className="pill-btn active">CMK</button>
-              <button className="pill-btn">CRM</button>
-              <button className="pill-btn">Keduanya</button>
-            </div>
-          </div>
-        </header>
+        )}
 
-        <div className="content-area">
-          {/* Alert Box */}
-          <div className="alert-box animate-in delay-1">
+        {/* Error State */}
+        {error && !loading && (
+          <div className="alert-box animate-in delay-1" style={{ borderColor: "var(--red-muted)", background: "var(--red-light)" }}>
             <span className="alert-icon" style={{ color: "#E24B4A" }}>
               <IconAlert />
             </span>
             <p className="alert-text">
-              <strong>Peringatan dini:</strong> Prediksi kenaikan CMK 18–24%
-              dalam 7 hari ke depan — curah hujan tinggi + akhir bulan.
+              <strong>Error:</strong> {error}
             </p>
-            <span className="badge-siaga">Siaga</span>
           </div>
+        )}
 
-          {/* Metrics Grid */}
-          <div className="metrics-grid">
-            <div className="metric-card animate-in delay-2">
-              <div className="metric-label">
-                <span className="dot dot-cmk"></span>Harga hari ini — CMK
+        {!loading && (
+          <>
+            {/* Alert Box */}
+            {dashboard && dashboard.status_inflasi !== "normal" && (
+              <div className="alert-box animate-in delay-1">
+                <span className="alert-icon" style={{ color: "#E24B4A" }}>
+                  <IconAlert />
+                </span>
+                <p className="alert-text">
+                  <strong>Peringatan dini:</strong> Prediksi menunjukkan harga cabai
+                  dalam status <strong>{dashboard.status_inflasi}</strong>. Tren harga{" "}
+                  <strong>{dashboard.tren}</strong> — perlu perhatian.
+                </p>
+                <span className="badge-siaga">
+                  {dashboard.status_inflasi === "kritis" ? "Kritis" : "Siaga"}
+                </span>
               </div>
-              <div className="metric-value">Rp 42.500</div>
-              <div className="metric-sub up">+12,3% vs minggu lalu</div>
-            </div>
-            <div className="metric-card animate-in delay-3">
-              <div className="metric-label">
-                <span className="dot dot-crm"></span>Harga hari ini — CRM
-              </div>
-              <div className="metric-value">Rp 38.000</div>
-              <div className="metric-sub up">+8,6% vs minggu lalu</div>
-            </div>
-            <div className="metric-card animate-in delay-4">
-              <div className="metric-label">
-                <span className="dot dot-pred"></span>Prediksi 7 hari — CMK
-              </div>
-              <div className="metric-value">Rp 50.100</div>
-              <div className="metric-sub neutral">Interval: 47.200–53.000</div>
-            </div>
-            <div className="metric-card animate-in delay-5">
-              <div className="metric-label">
-                <span className="dot dot-acc"></span>Akurasi model (R²)
-              </div>
-              <div className="metric-value">92,4%</div>
-              <div className="metric-sub up">MAPE 6,8% · data uji</div>
-            </div>
-          </div>
+            )}
 
-          {/* Main Grid: Chart + Predictions */}
-          <div className="main-grid">
-            {/* Chart Card */}
-            <div className="card animate-in delay-5">
-              <div className="card-header">
-                <h3>Tren harga &amp; prediksi 14 hari ke depan</h3>
-                <span className="badge badge-green">XGBoost aktif</span>
-              </div>
-              <div className="chart-legend">
-                <div className="legend-item">
-                  <span className="legend-line" style={{ background: "#0F6E56" }}></span>
-                  Aktual CMK
+            {/* Metrics Grid */}
+            <div className="metrics-grid">
+              <div className="metric-card animate-in delay-2">
+                <div className="metric-label">
+                  <span className="dot dot-cmk"></span>Harga hari ini — CMK
                 </div>
-                <div className="legend-item">
-                  <span className="legend-line dashed" style={{ color: "#0F6E56" }}></span>
-                  Prediksi CMK
+                <div className="metric-value">
+                  {dashboard ? formatRp(dashboard.harga_hari_ini) : "—"}
                 </div>
-                <div className="legend-item">
-                  <span className="legend-line" style={{ background: "#E67E22" }}></span>
-                  Aktual CRM
-                </div>
-                <div className="legend-item">
-                  <span className="legend-bar" style={{ background: "rgba(56, 189, 248, 0.4)" }}></span>
-                  Curah hujan
+                <div className={`metric-sub ${dashboard?.tren === "naik" ? "up" : dashboard?.tren === "turun" ? "down" : "neutral"}`}>
+                  {dashboard ? trendLabel(dashboard.tren) : "—"}
                 </div>
               </div>
-              <div className="chart-container" style={{ height: "320px" }}>
-                <PriceChart />
+              <div className="metric-card animate-in delay-3">
+                <div className="metric-label">
+                  <span className="dot dot-crm"></span>Rata-rata 30 hari
+                </div>
+                <div className="metric-value">
+                  {dashboard ? formatRp(dashboard.harga_rata_30hari) : "—"}
+                </div>
+                <div className="metric-sub neutral">
+                  Min: {dashboard ? formatRp(dashboard.harga_min_30hari) : "—"} · Max: {dashboard ? formatRp(dashboard.harga_max_30hari) : "—"}
+                </div>
               </div>
-            </div>
-
-            {/* Predictions List Card */}
-            <div className="card animate-in delay-6">
-              <div className="card-header">
-                <h3>Prediksi 7 hari ke depan</h3>
-                <span className="badge badge-purple">Interval 95%</span>
+              <div className="metric-card animate-in delay-4">
+                <div className="metric-label">
+                  <span className="dot dot-pred"></span>Prediksi H+7
+                </div>
+                <div className="metric-value">
+                  {dashboard ? formatRp(dashboard.prediksi_h7) : "—"}
+                </div>
+                <div className="metric-sub neutral">
+                  H+1: {dashboard ? formatRp(dashboard.prediksi_h1) : "—"} · H+3: {dashboard ? formatRp(dashboard.prediksi_h3) : "—"}
+                </div>
               </div>
-              <div className="card-body">
-                <ul className="prediction-list">
-                  {predictions.map((p, i) => (
-                    <li key={i} className="prediction-item">
-                      <span className="prediction-date">{p.date}</span>
-                      <span className="prediction-price">{p.price}</span>
-                      <span className={`prediction-badge badge ${p.color}`}>
-                        {p.pct}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Grid: Feature Importance + Table */}
-          <div className="bottom-grid">
-            {/* Feature Importance */}
-            <div className="card animate-in delay-7">
-              <div className="card-header">
-                <h3>Feature importance</h3>
-                <span className="badge badge-green">XGBoost</span>
-              </div>
-              <div className="card-body">
-                <div className="feature-list">
-                  {features.map((f, i) => (
-                    <div key={i} className="feature-item">
-                      <div className="feature-label">
-                        <span>{f.label}</span>
-                        <span>{f.pct}%</span>
-                      </div>
-                      <div className="feature-bar-bg">
-                        <div
-                          className={`feature-bar-fill ${f.barClass}`}
-                          style={{ width: `${(f.pct / 34.2) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+              <div className="metric-card animate-in delay-5">
+                <div className="metric-label">
+                  <span className="dot dot-acc"></span>Akurasi model (R²)
+                </div>
+                <div className="metric-value">
+                  {r2Value !== undefined ? `${(r2Value * 100).toFixed(1)}%` : "—"}
+                </div>
+                <div className="metric-sub up">
+                  {metrik?.metrik?.h1?.MAPE !== undefined
+                    ? `MAPE ${metrik.metrik.h1.MAPE.toFixed(1)}% · data uji`
+                    : "—"}
                 </div>
               </div>
             </div>
 
-            {/* Recent Prices Table */}
-            <div className="card animate-in delay-8">
-              <div className="card-header">
-                <h3>Riwayat harga terbaru</h3>
-                <span className="badge badge-green">PIHPS</span>
+            {/* Main Grid: Chart + Predictions */}
+            <div className="main-grid">
+              {/* Chart Card */}
+              <div className="card animate-in delay-5">
+                <div className="card-header">
+                  <h3>Tren harga &amp; prediksi</h3>
+                  <span className="badge badge-green">XGBoost aktif</span>
+                </div>
+                <div className="chart-legend">
+                  <div className="legend-item">
+                    <span className="legend-line" style={{ background: "#0F6E56" }}></span>
+                    Aktual CMK
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-line dashed" style={{ color: "#0F6E56" }}></span>
+                    Prediksi CMK
+                  </div>
+                </div>
+                <div className="chart-container" style={{ height: "320px" }}>
+                  <PriceChart
+                    labels={chartLabels.length > 0 ? chartLabels : undefined}
+                    data={chartData.length > 0 ? chartData : undefined}
+                    prediksiH1={dashboard?.prediksi_h1}
+                    prediksiH3={dashboard?.prediksi_h3}
+                    prediksiH7={dashboard?.prediksi_h7}
+                  />
+                </div>
               </div>
-              <div className="card-body" style={{ padding: 0 }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Tanggal</th>
-                      <th>Komoditas</th>
-                      <th>Rp/kg</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tableData.map((row, i) => (
-                      <tr key={i}>
-                        <td>{row.tanggal}</td>
-                        <td>{row.komoditas}</td>
-                        <td>{row.harga}</td>
-                        <td>
-                          <span className={`status-badge ${row.statusClass}`}>
-                            {row.status}
+
+              {/* Predictions List Card */}
+              <div className="card animate-in delay-6">
+                <div className="card-header">
+                  <h3>Prediksi per horizon</h3>
+                  <span className="badge badge-purple">XGBoost</span>
+                </div>
+                <div className="card-body">
+                  {prediksi.length > 0 ? (
+                    <ul className="prediction-list">
+                      {prediksi.map((p, i) => (
+                        <li key={i} className="prediction-item">
+                          <span className="prediction-date">{p.keterangan}</span>
+                          <span className="prediction-price">
+                            {p.error ? "Error" : formatRp(p.prediksi_rp)}
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <span className={`prediction-badge badge ${p.error ? "badge-red" : "badge-green"}`}>
+                            {p.error ? "N/A" : p.tanggal_prediksi}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                      Data prediksi belum tersedia
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </main>
-    </div>
+
+            {/* Bottom Grid: Feature Importance + Recent History */}
+            <div className="bottom-grid">
+              {/* Feature Importance */}
+              <div className="card animate-in delay-7">
+                <div className="card-header">
+                  <h3>Feature importance</h3>
+                  <span className="badge badge-green">XGBoost</span>
+                </div>
+                <div className="card-body">
+                  <div className="feature-list">
+                    {features.map((f, i) => (
+                      <div key={i} className="feature-item">
+                        <div className="feature-label">
+                          <span>{f.label}</span>
+                          <span>{f.pct}%</span>
+                        </div>
+                        <div className="feature-bar-bg">
+                          <div
+                            className={`feature-bar-fill ${f.barClass}`}
+                            style={{ width: `${(f.pct / 34.2) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Prices Table */}
+              <div className="card animate-in delay-8">
+                <div className="card-header">
+                  <h3>Riwayat harga terbaru</h3>
+                  <span className="badge badge-green">PIHPS</span>
+                </div>
+                <div className="card-body" style={{ padding: 0 }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Tanggal</th>
+                        <th>Harga CMK</th>
+                        <th>Perubahan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historis.length > 0 ? (
+                        historis.slice(-7).reverse().map((row, i) => {
+                          const idx = historis.length - 1 - i;
+                          const prev = idx > 0 ? historis[idx - 1]?.harga_cabai_merah : null;
+                          const change = prev ? ((row.harga_cabai_merah - prev) / prev * 100) : 0;
+                          const statusClass = change > 0 ? "status-naik" : change < 0 ? "status-stabil" : "status-plus";
+                          return (
+                            <tr key={i}>
+                              <td>{new Date(row.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</td>
+                              <td>{formatRp(row.harga_cabai_merah)}</td>
+                              <td>
+                                <span className={`status-badge ${statusClass}`}>
+                                  {change > 0 ? "+" : ""}{change.toFixed(1)}%
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={3} style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                            Belum ada data
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }

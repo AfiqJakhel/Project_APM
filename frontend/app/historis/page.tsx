@@ -94,113 +94,143 @@ export default function HistorisPage() {
           </div>
         </div>
 
-        {/* Stats cards */}
-        <div className="metrics-grid animate-in delay-2">
-          <div className="metric-card">
-            <div className="metric-label">Rata-rata</div>
-            <div className="metric-value" style={{ fontSize: 22 }}>{formatRp(avg)}</div>
-            <div className="metric-sub neutral">{data.length} hari data</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label">Terendah</div>
-            <div className="metric-value" style={{ fontSize: 22, color: "var(--green)" }}>{formatRp(min)}</div>
-            <div className="metric-sub up">Harga minimum</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label">Tertinggi</div>
-            <div className="metric-value" style={{ fontSize: 22, color: "var(--red)" }}>{formatRp(max)}</div>
-            <div className="metric-sub neutral">Harga maksimum</div>
-          </div>
-          <div className="metric-card">
-            <div className="metric-label">Volatilitas (σ)</div>
-            <div className="metric-value" style={{ fontSize: 22 }}>{formatRp(volatility)}</div>
-            <div className="metric-sub neutral">Standar deviasi</div>
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="alert-box" style={{ borderColor: "var(--red-muted)", background: "var(--red-light)" }}>
-            <p className="alert-text"><strong>Error:</strong> {error}</p>
-          </div>
-        )}
-
-        {/* Chart */}
-        <div className="card animate-in delay-3">
-          <div className="card-header">
-            <h3>Grafik Harga Historis</h3>
-            <span className="badge badge-green">CMK</span>
-          </div>
-          <div className="chart-container" style={{ height: "380px" }}>
-            {loading ? (
-              <div className="loading-container">
-                <div className="loading-spinner" />
-                <p>Memuat grafik...</p>
+        {/* Loading Skeleton */}
+        {loading ? (
+          <div className="historis-skeleton animate-in delay-2" aria-busy="true" style={{ marginTop: 20 }}>
+            <div className="metrics-grid" style={{ marginBottom: 20 }}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="metric-card">
+                  <div className="skeleton" style={{ width: "50%", height: 16, marginBottom: 12 }} />
+                  <div className="skeleton" style={{ width: "80%", height: 32, marginBottom: 12 }} />
+                  <div className="skeleton" style={{ width: "60%", height: 14 }} />
+                </div>
+              ))}
+            </div>
+            <div className="card" style={{ marginBottom: 20 }}>
+              <div className="card-header">
+                <div className="skeleton" style={{ width: 150, height: 20 }} />
               </div>
-            ) : (
-              <PriceChart
-                labels={chartLabels}
-                data={chartPrices}
-              />
-            )}
+              <div className="card-body" style={{ height: 380, padding: 20 }}>
+                <div className="skeleton" style={{ width: "100%", height: "100%" }} />
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-header">
+                <div className="skeleton" style={{ width: 150, height: 20 }} />
+              </div>
+              <div className="card-body" style={{ padding: 20 }}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} style={{ marginBottom: 16 }}>
+                     <div className="skeleton" style={{ width: "100%", height: 24 }} />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <>
+            {/* Stats cards */}
+            <div className="metrics-grid animate-in delay-2">
+              <div className="metric-card">
+                <div className="metric-label">Rata-rata</div>
+                <div className="metric-value" style={{ fontSize: 22 }}>{formatRp(avg)}</div>
+                <div className="metric-sub neutral">{data.length} hari data</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">Terendah</div>
+                <div className="metric-value" style={{ fontSize: 22, color: "var(--green)" }}>{formatRp(min)}</div>
+                <div className="metric-sub up">Harga minimum</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">Tertinggi</div>
+                <div className="metric-value" style={{ fontSize: 22, color: "var(--red)" }}>{formatRp(max)}</div>
+                <div className="metric-sub neutral">Harga maksimum</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">Volatilitas (σ)</div>
+                <div className="metric-value" style={{ fontSize: 22 }}>{formatRp(volatility)}</div>
+                <div className="metric-sub neutral">Standar deviasi</div>
+              </div>
+            </div>
 
-        {/* Table */}
-        <div className="card animate-in delay-4">
-          <div className="card-header">
-            <h3>Tabel Data Historis</h3>
-            <span className="badge badge-purple">{data.length} baris</span>
-          </div>
-          <div className="card-body" style={{ padding: 0, maxHeight: 400, overflowY: "auto" }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>No</th>
-                  <th>Tanggal</th>
-                  <th>Harga CMK (Rp/kg)</th>
-                  {data.some((d) => d.harga_cabai_rawit) && <th>Harga CRM (Rp/kg)</th>}
-                  <th>Perubahan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.length > 0 ? (
-                  [...data].reverse().map((row, i) => {
-                    const idx = data.length - 1 - i;
-                    const prev = idx > 0 ? data[idx - 1]?.harga_cabai_merah : null;
-                    const change = prev
-                      ? ((row.harga_cabai_merah - prev) / prev) * 100
-                      : 0;
-                    const statusClass =
-                      change > 1 ? "status-naik" : change < -1 ? "status-stabil" : "status-plus";
-                    return (
-                      <tr key={i}>
-                        <td>{i + 1}</td>
-                        <td>{new Date(row.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</td>
-                        <td>{formatRp(row.harga_cabai_merah)}</td>
-                        {data.some((d) => d.harga_cabai_rawit) && (
-                          <td>{row.harga_cabai_rawit ? formatRp(row.harga_cabai_rawit) : "—"}</td>
-                        )}
-                        <td>
-                          <span className={`status-badge ${statusClass}`}>
-                            {change > 0 ? "+" : ""}
-                            {change.toFixed(1)}%
-                          </span>
+            {/* Error */}
+            {error && (
+              <div className="alert-box" style={{ borderColor: "var(--red-muted)", background: "var(--red-light)" }}>
+                <p className="alert-text"><strong>Error:</strong> {error}</p>
+              </div>
+            )}
+
+            {/* Chart */}
+            <div className="card animate-in delay-3">
+              <div className="card-header">
+                <h3>Grafik Harga Historis</h3>
+                <span className="badge badge-green">CMK</span>
+              </div>
+              <div className="chart-container" style={{ height: "380px" }}>
+                <PriceChart
+                  labels={chartLabels}
+                  data={chartPrices}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="card animate-in delay-4">
+              <div className="card-header">
+                <h3>Tabel Data Historis</h3>
+                <span className="badge badge-purple">{data.length} baris</span>
+              </div>
+              <div className="card-body" style={{ padding: 0, maxHeight: 400, overflowY: "auto" }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>Tanggal</th>
+                      <th>Harga CMK (Rp/kg)</th>
+                      {data.some((d) => d.harga_cabai_rawit) && <th>Harga CRM (Rp/kg)</th>}
+                      <th>Perubahan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.length > 0 ? (
+                      [...data].reverse().map((row, i) => {
+                        const idx = data.length - 1 - i;
+                        const prev = idx > 0 ? data[idx - 1]?.harga_cabai_merah : null;
+                        const change = prev
+                          ? ((row.harga_cabai_merah - prev) / prev) * 100
+                          : 0;
+                        const statusClass =
+                          change > 1 ? "status-naik" : change < -1 ? "status-stabil" : "status-plus";
+                        return (
+                          <tr key={i}>
+                            <td>{i + 1}</td>
+                            <td>{new Date(row.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</td>
+                            <td>{formatRp(row.harga_cabai_merah)}</td>
+                            {data.some((d) => d.harga_cabai_rawit) && (
+                              <td>{row.harga_cabai_rawit ? formatRp(row.harga_cabai_rawit) : "—"}</td>
+                            )}
+                            <td>
+                              <span className={`status-badge ${statusClass}`}>
+                                {change > 0 ? "+" : ""}
+                                {change.toFixed(1)}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>
+                          Tidak ada data
                         </td>
                       </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>
-                      {loading ? "Memuat..." : "Tidak ada data"}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </>
   );

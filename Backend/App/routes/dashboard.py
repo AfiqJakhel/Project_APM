@@ -20,8 +20,8 @@ from config.settings import (
     BATAS_HARGA_KRITIS,
     REALTIME_STATUS_FILE,
 )
-from App.core import predictor
-from App.schemas.predict import DashboardResponse, StatistikBulananItem
+from app.core import predictor
+from app.schemas.predict import DashboardResponse, StatistikBulananItem
 
 router = APIRouter()
 
@@ -98,17 +98,12 @@ def _detect_tren(df: pd.DataFrame) -> str:
         return "stabil"
 
 
-async def _predict_for_row(horizon: str, row: pd.Series) -> float | None:
+async def _predict_for_input(horizon: str, input_data: dict) -> float | None:
     """
-    Jalankan prediksi untuk satu horizon dari baris terakhir dataset menggunakan predictor.
+    Jalankan prediksi untuk satu horizon dari input dictionary.
     Return None jika model tidak tersedia atau terjadi error.
     """
     try:
-        # Convert ke dict
-        input_data = row.to_dict()
-        if "tanggal" in input_data and hasattr(input_data["tanggal"], "strftime"):
-            input_data["tanggal"] = input_data["tanggal"].strftime("%Y-%m-%d")
-            
         hasil = await predictor.prediksi_harga(input_data, horizon)
         return float(hasil["prediksi_rp"])
     except Exception:
@@ -174,10 +169,12 @@ async def get_dashboard():
         # ---- Deteksi tren ----
         tren = _detect_tren(df)
 
-        # ---- Prediksi semua horizon dari baris terakhir ----
-        prediksi_h1 = await _predict_for_row("h1", baris_terakhir.copy())
-        prediksi_h3 = await _predict_for_row("h3", baris_terakhir.copy())
-        prediksi_h7 = await _predict_for_row("h7", baris_terakhir.copy())
+        # ---- Prediksi semua horizon menggunakan fitur terkini standar ----
+        # Hal ini menjamin nilai prediksi sama persis dengan halaman /prediksi
+        input_data_prediksi = predictor.get_fitur_terkini()
+        prediksi_h1 = await _predict_for_input("h1", input_data_prediksi)
+        prediksi_h3 = await _predict_for_input("h3", input_data_prediksi)
+        prediksi_h7 = await _predict_for_input("h7", input_data_prediksi)
 
         # ---- Status inflasi berdasarkan prediksi H+1 ----
         status_inflasi = _determine_status_inflasi(prediksi_h1)

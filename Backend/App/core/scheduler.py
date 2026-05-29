@@ -35,12 +35,34 @@ def setup_scheduler():
     Setup dan start scheduler. Dipanggil saat FastAPI startup via lifespan.
     Job: update_harian_realtime setiap hari SCHEDULER_JAM:SCHEDULER_MENIT WIB.
     """
-    from App.core.scraper import jalankan_update_realtime
+    from app.core.scraper import jalankan_update_realtime
+    from app.core.predictor import load_dataset_to_cache
+    from app.core.retrain import jalankan_retrain
+
+    async def jalankan_dan_refresh_cache():
+        try:
+            logger.info("[Scheduler] Memulai eksekusi scraping data harian...")
+            hasil = await jalankan_update_realtime()
+            
+            # Jika proses scraping/update berhasil (atau setidaknya partial/fallback)
+            if hasil.get("status") in ["success", "partial", "fallback"]:
+                logger.info(f"[Scheduler] Scraping selesai dengan status: {hasil.get('status')}. Memanggil load_dataset_to_cache()...")
+                
+                # Refresh cache memory agar prediksi menggunakan data terbaru
+                sukses = load_dataset_to_cache()
+                if sukses:
+                    logger.info("[Scheduler] Cache dataset berhasil di-refresh.")
+                else:
+                    logger.error("[Scheduler] Gagal me-refresh cache dataset!")
+            else:
+                logger.error(f"[Scheduler] Scraping error/gagal: {hasil.get('pesan')}. Cache akan di-skip.")
+        except Exception as e:
+            logger.error(f"[Scheduler] Terjadi exception saat scraping/refresh cache: {e}")
 
     scheduler = get_scheduler()
 
     scheduler.add_job(
-        func              = jalankan_update_realtime,
+        func              = jalankan_dan_refresh_cache,
         trigger           = CronTrigger(
             hour     = SCHEDULER_JAM,
             minute   = SCHEDULER_MENIT,
@@ -50,6 +72,21 @@ def setup_scheduler():
         name              = "Update Harga & Cuaca Harian",
         replace_existing  = True,
         misfire_grace_time= 3600,   # toleransi 1 jam jika komputer sleep
+    )
+    
+    # Job Retrain Mingguan
+    scheduler.add_job(
+        func              = jalankan_retrain,
+        trigger           = CronTrigger(
+            day_of_week = "sun", # Hari Minggu
+            hour        = 2,     # Jam 02.00 WIB
+            minute      = 0,
+            timezone    = "Asia/Jakarta",
+        ),
+        id                = "retrain_mingguan",
+        name              = "Retrain Model Mingguan",
+        replace_existing  = True,
+        misfire_grace_time= 7200,   # toleransi 2 jam
     )
 
     if not scheduler.running:

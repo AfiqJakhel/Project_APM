@@ -124,30 +124,6 @@ def load_model(label: str):
         )
 
 
-def load_model_arah(label: str):
-    """
-    Load model XGBClassifier untuk horizon tertentu.
-    """
-    cache_key = f"model_arah_{label}"
-    if cache_key in _CACHE:
-        return _CACHE[cache_key]
-    
-    pattern = f"model_arah_{label}.pkl"
-    model_path = MODEL_DIR / pattern
-    
-    if not model_path.exists():
-        logger.warning(f"Model klasifikasi {label} tidak ditemukan di {MODEL_DIR}")
-        return None
-    
-    try:
-        model = joblib.load(model_path)
-        _CACHE[cache_key] = model
-        logger.info(f"Model klasifikasi {label} berhasil dimuat: {pattern}")
-        return model
-    except Exception as e:
-        logger.error(f"Error loading model klasifikasi {label}: {e}")
-        return None
-
 
 def load_feature_cols(label: str) -> List[str]:
     """
@@ -216,7 +192,6 @@ def preload_artifacts():
         load_scaler()
         for label in ["h1", "h3", "h7"]:
             load_model(label)
-            load_model_arah(label)
             load_feature_cols(label)
         logger.info("Preloading ML artifacts berhasil.")
     except Exception as e:
@@ -263,88 +238,6 @@ def get_dataset() -> pd.DataFrame:
 # =============================================================================
 # BAGIAN 2 — FUNGSI PREDIKSI UTAMA
 # =============================================================================
-
-# Threshold default jika thresholds.json belum ada (konservatif, sebelum training)
-_DEFAULT_THRESHOLDS: dict = {"h1": 0.50, "h3": 0.50, "h7": 0.50}
-
-
-def _load_thresholds() -> dict:
-    """
-    Muat threshold optimal per horizon dari thresholds.json.
-    File ini dibuat oleh train.py menggunakan Youden's J Statistic.
-    Jika file belum ada, kembalikan threshold default (0.5).
-    Hasil di-cache agar tidak baca file tiap request.
-    """
-    # Gunakan cache yang sudah ada di _CACHE
-    if "thresholds" in _CACHE:
-        return _CACHE["thresholds"]
-
-    if THR_PATH.exists():
-        try:
-            data = json.loads(THR_PATH.read_text())
-            # Ekstrak nilai threshold saja dari setiap entry
-            result = {
-                k: v["threshold"] if isinstance(v, dict) else float(v)
-                for k, v in data.items()
-                if k in ["h1", "h3", "h7"]
-            }
-            # Isi horizon yang tidak ada dengan default
-            for lbl in ["h1", "h3", "h7"]:
-                result.setdefault(lbl, _DEFAULT_THRESHOLDS[lbl])
-            _CACHE["thresholds"] = result
-            logger.info(f"Thresholds dimuat dari {THR_PATH.name}: {result}")
-            return result
-        except Exception as e:
-            logger.warning(f"Gagal membaca thresholds.json: {e}. Pakai default.")
-
-    logger.warning("thresholds.json belum ada — pakai threshold default 0.5. "
-                   "Jalankan train.py untuk membuat file ini.")
-    return _DEFAULT_THRESHOLDS.copy()
-
-
-def prediksi_arah(df_input: pd.DataFrame, label: str) -> dict:
-    """
-    Prediksi arah pergerakan harga menggunakan XGBClassifier.
-    Target 1 (Naik), 0 (Turun/Tetap).
-
-    Threshold dibaca dari thresholds.json (dikalibrasi Youden's J saat training),
-    bukan hardcode, agar tidak perlu edit kode ketika threshold berubah.
-    """
-    model = load_model_arah(label)
-    if not model:
-        return {"arah_prediksi": None, "confidence_arah": None}
-
-    try:
-        probs = model.predict_proba(df_input)[0]
-        if len(probs) > 1:
-            prob_naik = float(probs[1])
-        else:
-            prob_naik = float(probs[0]) if model.classes_[0] == 1 else 0.0
-
-        # ── Baca threshold optimal dari thresholds.json ───────────────────
-        thresholds = _load_thresholds()
-        thr        = thresholds.get(label, 0.50)
-        zona_stabil = 0.08  # ±8% dari threshold → zona "stabil"
-
-        if prob_naik >= thr + zona_stabil:
-            arah       = "naik"
-            confidence = prob_naik * 100
-        elif prob_naik <= thr - zona_stabil:
-            arah       = "turun"
-            confidence = (1 - prob_naik) * 100
-        else:
-            arah       = "stabil"
-            # Confidence stabil: seberapa dekat ke tengah zona stabil
-            confidence = (1 - abs(prob_naik - thr) / zona_stabil) * 100
-            confidence = max(0.0, min(100.0, confidence))
-
-        return {
-            "arah_prediksi"  : arah,
-            "confidence_arah": round(confidence, 2),
-        }
-    except Exception as e:
-        logger.error(f"Error saat memprediksi arah: {e}")
-        return {"arah_prediksi": None, "confidence_arah": None}
 
 
 def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
@@ -410,8 +303,22 @@ def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
         prediksi = model.predict(df_input)
         prediksi_rp = float(prediksi[0])
         
-        # Prediksi arah pergerakan harga
-        hasil_arah = prediksi_arah(df_input, label)
+        # Prediksi arah secara deterministik dari selisih dengan harga terkini
+        harga_hari_ini = float(input_data.get("harga_cabai_merah", prediksi_rp))
+        if harga_hari_ini == 0:
+            harga_hari_ini = prediksi_rp
+            
+        selisih = prediksi_rp - harga_hari_ini
+        perubahan_persen = (selisih / harga_hari_ini * 100) if harga_hari_ini > 0 else 0.0
+        
+        # Batas stabil (contoh: selisih <= 0.25%)
+        batas_stabil = 0.25
+        if perubahan_persen > batas_stabil:
+            arah = "naik"
+        elif perubahan_persen < -batas_stabil:
+            arah = "turun"
+        else:
+            arah = "stabil"
         
         # Hitung tanggal prediksi
         horizon_days = int(label[1])  # "h1" -> 1, "h3" -> 3, "h7" -> 7
@@ -422,7 +329,7 @@ def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
             tanggal_base = tanggal_base.date()
         tanggal_prediksi = tanggal_base + timedelta(days=horizon_days)
         
-        logger.info(f"Prediksi {label} berhasil: Rp {prediksi_rp:,.0f} | Arah: {hasil_arah.get('arah_prediksi')}")
+        logger.info(f"Prediksi {label} berhasil: Rp {prediksi_rp:,.0f} | Arah: {arah} ({perubahan_persen:+.2f}%)")
         
         return {
             "horizon": label,
@@ -431,8 +338,8 @@ def prediksi_harga_sync(input_data: dict, label: str = "h1") -> dict:
             "model_version": model_version,
             "fitur_digunakan": len(feature_cols),
             "fitur_missing": len(missing_cols),
-            "arah_prediksi": hasil_arah.get("arah_prediksi"),
-            "confidence_arah": hasil_arah.get("confidence_arah"),
+            "arah_prediksi": arah,
+            "perubahan_persen": round(perubahan_persen, 2),
         }
         
     except HTTPException:

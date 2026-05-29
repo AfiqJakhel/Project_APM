@@ -14,7 +14,7 @@ export interface PrediksiItem {
   prediksi_rp: number;
   model_version: string;
   arah_prediksi?: string | null;
-  confidence_arah?: number | null;
+  perubahan_persen?: number | null;
   error?: string;
 }
 
@@ -32,7 +32,7 @@ export interface PrediksiSingleResponse {
   prediksi_rp: number;
   model_version: string;
   arah_prediksi?: string | null;
-  confidence_arah?: number | null;
+  perubahan_persen?: number | null;
 }
 
 export interface HistorisDataPoint {

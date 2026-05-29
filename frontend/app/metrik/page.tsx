@@ -128,9 +128,46 @@ export default function MetrikPage() {
 
       <div className="content-area">
         {loading && (
-          <div className="loading-container animate-in delay-1">
-            <div className="loading-spinner" />
-            <p>Memuat metrik model...</p>
+          <div className="metrik-skeleton animate-in delay-1" aria-busy="true">
+            <div className="metrik-cards-grid" style={{ marginBottom: 20 }}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="card">
+                  <div className="card-header">
+                     <div className="skeleton" style={{ width: 120, height: 20 }} />
+                  </div>
+                  <div className="card-body">
+                    <div className="metrik-grid">
+                      <div className="metrik-hero">
+                        <div className="skeleton" style={{ width: "60%", height: 16, marginBottom: 12 }} />
+                        <div className="skeleton" style={{ width: "80%", height: 36, marginBottom: 16 }} />
+                        <div className="skeleton" style={{ width: "100%", height: 8 }} />
+                      </div>
+                      <div className="metrik-details" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {[1, 2, 3, 4, 5].map((j) => (
+                          <div key={j} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                             <div className="skeleton" style={{ width: "40%", height: 14 }} />
+                             <div className="skeleton" style={{ width: "30%", height: 16 }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="card" style={{ marginBottom: 20 }}>
+              <div className="card-header">
+                 <div className="skeleton" style={{ width: 200, height: 20 }} />
+              </div>
+              <div className="card-body" style={{ padding: 20 }}>
+                 {[1, 2, 3, 4, 5].map((i) => (
+                   <div key={i} style={{ marginBottom: 16 }}>
+                      <div className="skeleton" style={{ width: "100%", height: 24 }} />
+                   </div>
+                 ))}
+              </div>
+            </div>
           </div>
         )}
 

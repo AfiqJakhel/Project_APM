@@ -133,9 +133,40 @@ export default function Home() {
       <div className="content-area">
         {/* Loading State */}
         {loading && (
-          <div className="loading-container animate-in delay-1">
-            <div className="loading-spinner" />
-            <p>Memuat data dashboard...</p>
+          <div className="dashboard-skeleton animate-in delay-1" aria-busy="true">
+            <div className="metrics-grid" style={{ marginBottom: 20 }}>
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="metric-card">
+                  <div className="skeleton" style={{ width: "50%", height: 16, marginBottom: 12 }} />
+                  <div className="skeleton" style={{ width: "80%", height: 32, marginBottom: 12 }} />
+                  <div className="skeleton" style={{ width: "60%", height: 14 }} />
+                </div>
+              ))}
+            </div>
+            <div className="main-grid" style={{ marginBottom: 20 }}>
+              <div className="card">
+                <div className="card-header">
+                  <div className="skeleton" style={{ width: 150, height: 20 }} />
+                </div>
+                <div className="card-body" style={{ height: 320, padding: 20 }}>
+                  <div className="skeleton" style={{ width: "100%", height: "100%" }} />
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-header">
+                  <div className="skeleton" style={{ width: 150, height: 20 }} />
+                </div>
+                <div className="card-body" style={{ padding: 20 }}>
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, paddingBottom: 15, borderBottom: '1px solid var(--border-light)' }}>
+                       <div className="skeleton" style={{ width: 60, height: 16 }} />
+                       <div className="skeleton" style={{ width: 100, height: 20 }} />
+                       <div className="skeleton" style={{ width: 50, height: 18, borderRadius: 20 }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from config.settings import TARGET
-from App.core import predictor
+from app.core import predictor
 
 router = APIRouter()
 

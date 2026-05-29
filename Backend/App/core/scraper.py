@@ -61,32 +61,25 @@ def init_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--log-level=3")
 
+    # Coba gunakan chromedriver dari system PATH terlebih dahulu (lebih cepat)
     try:
-        # cache_valid_range=0 memaksa WDM untuk selalu cek versi terbaru 
-        # dan tidak menggunakan cache lama yang mungkin rusak/salah arsitektur.
-        cache_manager = DriverCacheManager(valid_range=0)
-        driver_path = ChromeDriverManager(cache_manager=cache_manager).install()
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(SCRAPER_TIMEOUT)
+        return driver
+    except Exception as e_path:
+        logger.info(f"[Scraper] ChromeDriver system PATH tidak ditemukan/error: {e_path}. Mencoba webdriver-manager...")
+
+    # Jika gagal, baru gunakan webdriver-manager (dengan cache default, bukan valid_range=0)
+    try:
+        driver_path = ChromeDriverManager().install()
         service = Service(driver_path)
         
         driver = webdriver.Chrome(service=service, options=options)
         driver.set_page_load_timeout(SCRAPER_TIMEOUT)
         return driver
-    
     except OSError as e:
-        if "WinError 193" in str(e):
-            logger.error("[Scraper] WinError 193: Terdeteksi ketidakcocokan arsitektur ChromeDriver (32-bit vs 64-bit).")
-            # Fallback jika WDM gagal: coba panggil chromedriver dari PATH OS
-            try:
-                logger.info("[Scraper] Mencoba fallback ke chromedriver system PATH...")
-                driver = webdriver.Chrome(options=options)
-                driver.set_page_load_timeout(SCRAPER_TIMEOUT)
-                return driver
-            except Exception as e_path:
-                logger.error(f"[Scraper] Fallback system PATH gagal: {e_path}")
-                return None
-        else:
-            logger.error(f"[Scraper] Gagal inisialisasi driver: {e}")
-            return None
+        logger.error(f"[Scraper] Gagal inisialisasi driver via WDM: {e}")
+        return None
     except Exception as e:
         logger.error(f"[Scraper] Gagal inisialisasi driver: {e}")
         return None
@@ -107,7 +100,7 @@ def scrape_harga_pihps() -> dict:
     try:
         logger.info(f"[Scraper] Membuka {PIHPS_URL}")
         driver.get(PIHPS_URL)
-        wait = WebDriverWait(driver, 30)
+        wait = WebDriverWait(driver, 15) # Kurangi timeout dari 30s ke 15s
 
         # ── Tunggu halaman siap ───────────────────────────────────────────────
         try:
@@ -511,7 +504,7 @@ def update_dataset(harga_data: dict, cuaca_data: dict, daftar_libur: list) -> di
 
         # Reload cache predictor
         try:
-            from App.core import predictor
+            from app.core import predictor
             predictor.load_dataset_to_cache()
             logger.info("[Dataset] Cache predictor di-reload")
         except Exception as e:

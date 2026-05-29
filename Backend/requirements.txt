@@ -17,3 +17,4 @@ httpx==0.27.0              # Async HTTP client untuk Open-Meteo API
 apscheduler==3.10.4        # Scheduler harian otomatis jam 14.00 WIB
 aiofiles==23.2.1           # Async file I/O
 portalocker==2.8.2         # Cross-platform file locking (pengganti fcntl di Windows)
+python-dotenv==1.2.2

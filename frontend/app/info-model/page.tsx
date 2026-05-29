@@ -40,7 +40,7 @@ export default function InfoModelPage() {
   }, []);
 
   const statusColor = (ok: boolean) => (ok ? "var(--green)" : "var(--red)");
-  const statusText = (ok: boolean) => (ok ? "✅ Aktif" : "❌ Tidak tersedia");
+  const statusText = (ok: boolean) => (ok ? "Aktif" : "Tidak tersedia");
 
   const horizonColors: Record<string, string> = {
     h1: "#0F6E56",
@@ -75,9 +75,62 @@ export default function InfoModelPage() {
 
       <div className="content-area">
         {loading && (
-          <div className="loading-container animate-in delay-1">
-            <div className="loading-spinner" />
-            <p>Memuat informasi model...</p>
+          <div className="info-model-skeleton animate-in delay-1" aria-busy="true">
+            {/* Status Sistem skeleton */}
+            <div className="card" style={{ marginBottom: 20 }}>
+              <div className="card-header">
+                 <div className="skeleton" style={{ width: 150, height: 20 }} />
+              </div>
+              <div className="card-body">
+                <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+                   {[1, 2, 3, 4, 5].map((i) => (
+                     <div key={i} className="metric-card">
+                       <div className="skeleton" style={{ width: "70%", height: 16, marginBottom: 12 }} />
+                       <div className="skeleton" style={{ width: "90%", height: 20 }} />
+                     </div>
+                   ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Model Details skeleton */}
+            <div className="metrik-cards-grid" style={{ marginBottom: 20 }}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="card">
+                  <div className="card-header">
+                     <div className="skeleton" style={{ width: 120, height: 20 }} />
+                  </div>
+                  <div className="card-body">
+                     <div className="info-list" style={{ gap: 10 }}>
+                       {[1, 2, 3, 4].map((j) => (
+                         <div key={j} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-light)' }}>
+                            <div className="skeleton" style={{ width: "40%", height: 16 }} />
+                            <div className="skeleton" style={{ width: "50%", height: 16 }} />
+                         </div>
+                       ))}
+                     </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Dataset Info skeleton */}
+            <div className="card" style={{ marginBottom: 20 }}>
+              <div className="card-header">
+                 <div className="skeleton" style={{ width: 160, height: 20 }} />
+              </div>
+              <div className="card-body">
+                <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                   {[1, 2, 3].map((i) => (
+                     <div key={i} className="metric-card">
+                       <div className="skeleton" style={{ width: "60%", height: 16, marginBottom: 12 }} />
+                       <div className="skeleton" style={{ width: "80%", height: 28, marginBottom: 12 }} />
+                       <div className="skeleton" style={{ width: "50%", height: 14 }} />
+                     </div>
+                   ))}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

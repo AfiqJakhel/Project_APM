@@ -11,12 +11,12 @@ if str(ROOT) not in sys.path:
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 
-from App.core.scraper import (
+from app.core.scraper import (
     jalankan_update_realtime,
     get_cuaca_realtime,
     baca_status_realtime,
 )
-from App.core.scheduler import get_next_run_time
+from app.core.scheduler import get_next_run_time
 from config.settings import CUACA_LATITUDE, CUACA_LONGITUDE
 
 router = APIRouter()

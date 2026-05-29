@@ -17,9 +17,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core import predictor
-from app.core.scheduler import setup_scheduler, stop_scheduler
-from app.routes import predict, history, dashboard, realtime
+from App.core import predictor
+from App.core.scheduler import setup_scheduler, stop_scheduler
+from App.routes import predict, history, dashboard, realtime
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ async def _initial_update():
     """Update data sekali saat startup agar data selalu fresh saat server restart."""
     await asyncio.sleep(5)   # Tunggu model selesai load dulu
     try:
-        from app.core.scraper import jalankan_update_realtime
+        from App.core.scraper import jalankan_update_realtime
         logger.info("[Startup] Menjalankan initial update real-time...")
         await jalankan_update_realtime()
         logger.info("[Startup] Initial update selesai")

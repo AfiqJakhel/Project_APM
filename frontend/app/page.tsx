@@ -166,7 +166,7 @@ export default function Home() {
 
             {/* Metrics Grid */}
             <div className="metrics-grid">
-              <div className="metric-card animate-in delay-2">
+              <div className="metric-card metric-card--cmk animate-in delay-2">
                 <div className="metric-label">
                   <span className="dot dot-cmk"></span>Harga hari ini — CMK
                 </div>
@@ -177,7 +177,7 @@ export default function Home() {
                   {dashboard ? trendLabel(dashboard.tren) : "—"}
                 </div>
               </div>
-              <div className="metric-card animate-in delay-3">
+              <div className="metric-card metric-card--avg30 animate-in delay-3">
                 <div className="metric-label">
                   <span className="dot dot-crm"></span>Rata-rata 30 hari
                 </div>
@@ -188,7 +188,7 @@ export default function Home() {
                   Min: {dashboard ? formatRp(dashboard.harga_min_30hari) : "—"} · Max: {dashboard ? formatRp(dashboard.harga_max_30hari) : "—"}
                 </div>
               </div>
-              <div className="metric-card animate-in delay-4">
+              <div className="metric-card metric-card--prediksi animate-in delay-4">
                 <div className="metric-label">
                   <span className="dot dot-pred"></span>Prediksi H+7
                 </div>
@@ -199,7 +199,7 @@ export default function Home() {
                   H+1: {dashboard ? formatRp(dashboard.prediksi_h1) : "—"} · H+3: {dashboard ? formatRp(dashboard.prediksi_h3) : "—"}
                 </div>
               </div>
-              <div className="metric-card animate-in delay-5">
+              <div className="metric-card metric-card--akurasi animate-in delay-5">
                 <div className="metric-label">
                   <span className="dot dot-acc"></span>Akurasi model (R²)
                 </div>

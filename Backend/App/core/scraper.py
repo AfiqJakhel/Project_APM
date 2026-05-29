@@ -511,7 +511,7 @@ def update_dataset(harga_data: dict, cuaca_data: dict, daftar_libur: list) -> di
 
         # Reload cache predictor
         try:
-            from app.core import predictor
+            from App.core import predictor
             predictor.load_dataset_to_cache()
             logger.info("[Dataset] Cache predictor di-reload")
         except Exception as e:

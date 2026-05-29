@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.core.scraper import transform_data_ke_format_dataset, DATA_DIR
+from App.core.scraper import transform_data_ke_format_dataset, DATA_DIR
 
 def test_mapper_struktur_data():
     """

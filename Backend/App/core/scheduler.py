@@ -35,7 +35,7 @@ def setup_scheduler():
     Setup dan start scheduler. Dipanggil saat FastAPI startup via lifespan.
     Job: update_harian_realtime setiap hari SCHEDULER_JAM:SCHEDULER_MENIT WIB.
     """
-    from app.core.scraper import jalankan_update_realtime
+    from App.core.scraper import jalankan_update_realtime
 
     scheduler = get_scheduler()
 

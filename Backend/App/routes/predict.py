@@ -22,8 +22,8 @@ from config.settings import (
     MODEL_DIR,
     REALTIME_STATUS_FILE,
 )
-from app.core import predictor
-from app.schemas.predict import (
+from App.core import predictor
+from App.schemas.predict import (
     PrediksiRequest, PrediksiResponse, PrediksiSemuaResponse,
     TanggalTersediaResponse, FiturTerkiniResponse, DataHistorisResponse,
     ModelMetrikResponse, CacheInfoResponse, PrediksiOtomatisResponse,

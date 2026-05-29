@@ -53,36 +53,30 @@ _CACHE: Dict[str, any] = {
 
 def load_scaler():
     """
-    Load RobustScaler dari scaler.pkl.
-    Hasil di-cache agar tidak reload tiap request.
-    
-    Returns:
-        RobustScaler object
-        
-    Raises:
-        HTTPException(503): Jika scaler.pkl tidak ditemukan
+    Load scaler jika tersedia.
+    Jika tidak ada, return None karena model XGBoost
+    saat ini menggunakan data tanpa scaling.
     """
     if "scaler" in _CACHE:
         return _CACHE["scaler"]
-    
+
     if not SCALER_PATH.exists():
-        logger.error(f"scaler.pkl tidak ditemukan di {SCALER_PATH}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Scaler tidak tersedia. File tidak ditemukan: {SCALER_PATH}"
+        logger.warning(
+            f"scaler.pkl tidak ditemukan di {SCALER_PATH}. "
+            "Melanjutkan tanpa scaler karena model menggunakan data unscaled."
         )
-    
+        _CACHE["scaler"] = None
+        return None
+
     try:
         scaler = joblib.load(SCALER_PATH)
         _CACHE["scaler"] = scaler
         logger.info(f"Scaler berhasil dimuat dari {SCALER_PATH}")
         return scaler
     except Exception as e:
-        logger.error(f"Error loading scaler: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Gagal memuat scaler: {str(e)}"
-        )
+        logger.warning(f"Gagal memuat scaler, lanjut tanpa scaler: {e}")
+        _CACHE["scaler"] = None
+        return None
 
 
 def load_model(label: str):

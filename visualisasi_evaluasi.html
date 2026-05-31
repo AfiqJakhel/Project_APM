@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Evaluasi Final Model Prediksi Harga Cabai</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            
+            --red-color: #ef4444;
+            --red-border: #b91c1c;
+            --green-color: #10b981;
+            --green-border: #047857;
+            --blue-color: #3b82f6;
+            --blue-border: #1d4ed8;
+            --purple-color: #8b5cf6;
+            --purple-border: #6d28d9;
+            --orange-color: #f59e0b;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        h1, h2 {
+            text-align: center;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 24px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin: 0;
+        }
+
+        .card-desc {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+
+        /* KPI Cards */
+        .kpi-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            max-width: 1200px;
+            margin: 0 auto 30px auto;
+        }
+
+        .kpi-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .kpi-title {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .kpi-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .kpi-value span {
+            font-size: 1rem;
+            color: var(--green-color);
+            margin-left: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .kpi-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Dashboard Evaluasi Final XGBoost</h1>
+    <div class="subtitle">Performa Model Out-of-Sample: Cabai Merah vs Cabai Rawit (H1, H3, H7)</div>
+
+    <!-- Highlight KPIs (Using H1 averages or Best R2) -->
+    <div class="kpi-container">
+        <div class="kpi-card">
+            <div class="kpi-title">R² Terbaik (Rawit H1)</div>
+            <div class="kpi-value">97.19<span>%</span></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">R² Terbaik (Merah H1)</div>
+            <div class="kpi-value">96.82<span>%</span></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Max Beat Naive (Merah H7)</div>
+            <div class="kpi-value">53.8<span>%</span></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Direction Accuracy (Merah H1)</div>
+            <div class="kpi-value">56.5<span>%</span></div>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        
+        <!-- Chart 1: R-Squared -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Akurasi R² (Global Out-of-Sample)</h3>
+                <div class="card-desc">Semakin mendekati 1.0 (100%) semakin baik model menjelaskan varians data.</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartR2"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 2: MAE Comparison -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Mean Absolute Error (XGBoost vs Naive)</h3>
+                <div class="card-desc">Tingkat galat prediksi absolut dalam satuan Rupiah (semakin rendah = semakin baik).</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartMAE"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 3: Direction Accuracy -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Direction Accuracy (Arah Tebakan)</h3>
+                <div class="card-desc">Persentase akurasi model menebak arah naik/turunnya harga.</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartDA"></canvas>
+            </div>
+        </div>
+
+        <!-- Chart 4: Beat Naive Percentage -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Kemampuan Mengalahkan Naive (%)</h3>
+                <div class="card-desc">Persentase model XGBoost memiliki error lebih kecil dibanding strategi Harga Tetap.</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="chartBeat"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Global Chart Defaults
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = 'Inter';
+        
+        const labels = ['H+1', 'H+3', 'H+7'];
+        
+        // Data dari CSV
+        const dataR2Merah = [0.9682, 0.8925, 0.7327];
+        const dataR2Rawit = [0.9719, 0.9058, 0.8028];
+
+        const dataMAEMerahXGB = [1474.77, 3530.72, 6019.67];
+        const dataMAEMerahNaive = [1437.05, 3512.74, 6051.41];
+        
+        const dataMAERawitXGB = [1035.48, 2506.83, 4100.73];
+        const dataMAERawitNaive = [991.79, 2438.80, 4114.00];
+
+        const dataDAMerah = [56.52, 54.50, 53.97];
+        const dataDARawit = [47.30, 51.38, 52.35];
+
+        const dataBeatMerah = [17.9, 41.0, 53.8];
+        const dataBeatRawit = [5.1, 38.5, 43.6];
+
+        // 1. Chart R2
+        new Chart(document.getElementById('chartR2'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Cabai Merah',
+                        data: dataR2Merah,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: '#ef4444',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Cabai Rawit',
+                        data: dataR2Rawit,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                        borderColor: '#3b82f6',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 1.0, grid: { color: '#334155' } },
+                    x: { grid: { display: false } }
+                },
+                plugins: {
+                    tooltip: { callbacks: { label: (ctx) => ctx.dataset.label + ': ' + ctx.raw.toFixed(4) } }
+                }
+            }
+        });
+
+        // 2. Chart MAE
+        new Chart(document.getElementById('chartMAE'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Merah - XGBoost',
+                        data: dataMAEMerahXGB,
+                        borderColor: '#ef4444',
+                        backgroundColor: '#ef4444',
+                        borderWidth: 2,
+                        tension: 0.1,
+                        pointRadius: 4
+                    },
+                    {
+                        label: 'Merah - Naive',
+                        data: dataMAEMerahNaive,
+                        borderColor: 'rgba(239, 68, 68, 0.3)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.3)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        tension: 0.1,
+                        pointRadius: 4
+                    },
+                    {
+                        label: 'Rawit - XGBoost',
+                        data: dataMAERawitXGB,
+                        borderColor: '#3b82f6',
+                        backgroundColor: '#3b82f6',
+                        borderWidth: 2,
+                        tension: 0.1,
+                        pointRadius: 4
+                    },
+                    {
+                        label: 'Rawit - Naive',
+                        data: dataMAERawitNaive,
+                        borderColor: 'rgba(59, 130, 246, 0.3)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.3)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        tension: 0.1,
+                        pointRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#334155' }, title: { display: true, text: 'Rupiah (Rp)' } },
+                    x: { grid: { color: '#334155' } }
+                }
+            }
+        });
+
+        // 3. Chart Direction Accuracy (DA)
+        new Chart(document.getElementById('chartDA'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Cabai Merah (%)',
+                        data: dataDAMerah,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        fill: true,
+                        borderWidth: 2,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Cabai Rawit (%)',
+                        data: dataDARawit,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                        fill: true,
+                        borderWidth: 2,
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { min: 40, max: 65, grid: { color: '#334155' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+
+        // 4. Chart Beat Naive
+        new Chart(document.getElementById('chartBeat'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Cabai Merah',
+                        data: dataBeatMerah,
+                        backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                        borderColor: '#8b5cf6',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Cabai Rawit',
+                        data: dataBeatRawit,
+                        backgroundColor: 'rgba(236, 72, 153, 0.7)',
+                        borderColor: '#ec4899',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, grid: { color: '#334155' }, title: { display: true, text: 'Persentase (%)' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

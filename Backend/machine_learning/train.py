@@ -620,6 +620,40 @@ def shap_final(model, X_sample: pd.DataFrame, label: str, cfg: KomoditasConfig):
         log(f"    ! SHAP error: {e}")
 
 
+def plot_evaluasi_final(rows: list, cfg: KomoditasConfig):
+    if not rows: return
+    try:
+        horizons = [r["horizon"].upper() for r in rows]
+        r2_vals = [r["xgb_R2"] for r in rows]
+        da_vals = [r["xgb_DA_mean"] for r in rows]
+        beat_vals = [r["beat_naive_%"] for r in rows]
+
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        fig.suptitle(f"Evaluasi Final KPI - {cfg.nama}", fontsize=14, fontweight="bold")
+
+        axes[0].bar(horizons, r2_vals, color='royalblue')
+        axes[0].set_title("R² Score (Global)")
+        axes[0].set_ylim(0, 1.0)
+        for i, v in enumerate(r2_vals): axes[0].text(i, v + 0.02, f"{v:.4f}", ha='center')
+
+        axes[1].bar(horizons, da_vals, color='mediumseagreen')
+        axes[1].set_title("Direction Accuracy (%)")
+        axes[1].set_ylim(0, 100)
+        for i, v in enumerate(da_vals): axes[1].text(i, v + 2, f"{v:.1f}%", ha='center')
+
+        axes[2].bar(horizons, beat_vals, color='indianred')
+        axes[2].set_title("Beat Naive (%)")
+        axes[2].set_ylim(0, 100)
+        for i, v in enumerate(beat_vals): axes[2].text(i, v + 2, f"{v:.1f}%", ha='center')
+
+        plt.tight_layout()
+        plt.savefig(cfg.plots_dir / "evaluasi_final_kpi.png", bbox_inches="tight", dpi=150)
+        plt.close()
+        log(f"    -> Plot evaluasi final disimpan di: {cfg.plots_dir.name}/evaluasi_final_kpi.png")
+    except Exception as e:
+        log(f"    ! Gagal membuat plot evaluasi final: {e}")
+
+
 def laporan_ringkasan(all_results: dict, cfg: KomoditasConfig):
     log(f"\n  RINGKASAN AKHIR: {cfg.nama.upper()}")
     log(f"  {'Model':<10} {'XGB-MAE':>10} {'Naive-MAE':>10} {'Beat%':>6}")
@@ -641,6 +675,7 @@ def laporan_ringkasan(all_results: dict, cfg: KomoditasConfig):
         
     if rows:
         pd.DataFrame(rows).to_csv(cfg.metrics_dir / f"ringkasan_{cfg.folder_output}.csv", index=False)
+        plot_evaluasi_final(rows, cfg)
         
     with open(cfg.model_dir / f"log_{cfg.folder_output}.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(LOG_LINES))

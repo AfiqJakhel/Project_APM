@@ -13,6 +13,7 @@ function formatRp(value: number): string {
    HISTORIS PAGE
    ══════════════════════════════════════════ */
 export default function HistorisPage() {
+  const [activeKomoditas, setActiveKomoditas] = useState<"merah" | "rawit">("merah");
   const [data, setData] = useState<HistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,10 +45,12 @@ export default function HistorisPage() {
     const dt = new Date(d.tanggal);
     return `${dt.getDate()}/${dt.getMonth() + 1}`;
   });
-  const chartPrices = data.map((d) => d.harga_cabai_merah);
+  
+  const isRawit = activeKomoditas === "rawit";
+  const chartPrices = data.map((d) => isRawit ? (d as any).harga_cabai_rawit : d.harga_cabai_merah);
 
   // Stats
-  const prices = data.map((d) => d.harga_cabai_merah).filter((v) => v > 0);
+  const prices = data.map((d) => isRawit ? (d as any).harga_cabai_rawit : d.harga_cabai_merah).filter((v) => v && v > 0);
   const avg = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
   const min = prices.length > 0 ? Math.min(...prices) : 0;
   const max = prices.length > 0 ? Math.max(...prices) : 0;
@@ -66,6 +69,36 @@ export default function HistorisPage() {
           <p>Grafik interaktif dan tabel data harga historis</p>
         </div>
       </header>
+
+      {/* ── Komoditas Selector (Sliding Tab) ─────────────────────────── */}
+      <div style={{ padding: "0 40px", marginTop: "10px" }}>
+        <div className="sliding-tabs-container">
+          <div 
+            className="slider-bg" 
+            style={{
+              width: "50%",
+              left: activeKomoditas === "merah" ? "4px" : "calc(50% - 4px)",
+              background: "linear-gradient(90deg, #0F3E39 0%, #3F9E96 100%)"
+            }}
+          />
+          <button
+            className={`sliding-tab ${activeKomoditas === "merah" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("merah")}
+            disabled={loading}
+          >
+            Cabai Merah
+          </button>
+          <button
+            className={`sliding-tab ${activeKomoditas === "rawit" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("rawit")}
+            disabled={loading}
+          >
+            Cabai Rawit
+          </button>
+        </div>
+      </div>
 
       <div className="content-area">
         {/* Filters */}
@@ -164,12 +197,14 @@ export default function HistorisPage() {
             <div className="card animate-in delay-3">
               <div className="card-header">
                 <h3>Grafik Harga Historis</h3>
-                <span className="badge badge-green">CMK</span>
+                <span className="badge badge-green">{isRawit ? "CRM" : "CMK"}</span>
               </div>
               <div className="chart-container" style={{ height: "380px" }}>
                 <PriceChart
                   labels={chartLabels}
                   data={chartPrices}
+                  lineColor={isRawit ? "#e65100" : "#0F6E56"}
+                  datasetLabel={`Harga Aktual ${isRawit ? "Rawit" : "Merah"}`}
                 />
               </div>
             </div>

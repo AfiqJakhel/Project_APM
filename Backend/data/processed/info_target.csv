@@ -1,8 +1,13 @@
 target,keterangan
 harga_cabai_merah,Harga aktual hari ini (referensi)
-target_h1,Prediksi H+1 (besok)
-target_h3,Prediksi H+3 (3 hari ke depan)
-target_h7,Prediksi H+7 (7 hari ke depan)
-arah_target_h1,"Arah Prediksi H+1 (1=Naik, 0=Turun/Tetap)"
-arah_target_h3,"Arah Prediksi H+3 (1=Naik, 0=Turun/Tetap)"
-arah_target_h7,"Arah Prediksi H+7 (1=Naik, 0=Turun/Tetap)"
+target_h1,Prediksi Merah h1 (delta)
+target_h3,Prediksi Merah h3 (delta)
+target_h7,Prediksi Merah h7 (delta)
+target_rawit_h1,Prediksi Rawit h1 (delta)
+target_rawit_h3,Prediksi Rawit h3 (delta)
+target_rawit_h7,Prediksi Rawit h7 (delta)
+arah_target_h1,"Arah Prediksi h1 (1=Naik, 0=Turun/Tetap)"
+arah_target_h3,"Arah Prediksi h3 (1=Naik, 0=Turun/Tetap)"
+arah_target_h7,"Arah Prediksi h7 (1=Naik, 0=Turun/Tetap)"
+harga_hari_ini,Referensi: harga_hari_ini
+harga_rawit_hari_ini,Referensi: harga_rawit_hari_ini

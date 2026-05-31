@@ -36,6 +36,7 @@ const metrikExplanations: Record<string, { name: string; desc: string; unit: str
    METRIK PAGE
    ══════════════════════════════════════════ */
 export default function MetrikPage() {
+  const [activeKomoditas, setActiveKomoditas] = useState<"merah" | "rawit">("merah");
   const [data, setData] = useState<MetrikResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +127,36 @@ export default function MetrikPage() {
         </div>
       </header>
 
+      {/* ── Komoditas Selector (Sliding Tab) ─────────────────────────── */}
+      <div style={{ padding: "0 40px", marginTop: "10px" }}>
+        <div className="sliding-tabs-container">
+          <div 
+            className="slider-bg" 
+            style={{
+              width: "50%",
+              left: activeKomoditas === "merah" ? "4px" : "calc(50% - 4px)",
+              background: "linear-gradient(90deg, #0F3E39 0%, #3F9E96 100%)"
+            }}
+          />
+          <button
+            className={`sliding-tab ${activeKomoditas === "merah" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("merah")}
+            disabled={loading}
+          >
+            Cabai Merah
+          </button>
+          <button
+            className={`sliding-tab ${activeKomoditas === "rawit" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("rawit")}
+            disabled={loading}
+          >
+            Cabai Rawit
+          </button>
+        </div>
+      </div>
+
       <div className="content-area">
         {loading && (
           <div className="metrik-skeleton animate-in delay-1" aria-busy="true">
@@ -181,9 +212,10 @@ export default function MetrikPage() {
           <>
             {/* Metric cards per horizon */}
             <div className="metrik-cards-grid">
-              {(["h1", "h3", "h7"] as const).map((h) =>
-                data.metrik[h] ? renderMetrikCard(h, data.metrik[h]) : null
-              )}
+              {(["h1", "h3", "h7"] as const).map((h) => {
+                const key = (activeKomoditas === "rawit" ? `rawit_${h}` : h) as keyof typeof data.metrik;
+                return data.metrik[key] ? renderMetrikCard(h, data.metrik[key] as MetrikHorizon) : null;
+              })}
             </div>
 
             {/* Comparison table */}
@@ -206,7 +238,8 @@ export default function MetrikPage() {
                   <tbody>
                     {Object.entries(metrikExplanations).map(([key, info]) => {
                       const k = key as keyof MetrikHorizon;
-                      const vals = [data.metrik.h1?.[k], data.metrik.h3?.[k], data.metrik.h7?.[k]];
+                      const getH = (h: "h1"|"h3"|"h7") => data.metrik[(activeKomoditas === "rawit" ? `rawit_${h}` : h) as keyof typeof data.metrik] as MetrikHorizon | undefined;
+                      const vals = [getH("h1")?.[k], getH("h3")?.[k], getH("h7")?.[k]];
                       const format = (v: number | undefined) => {
                         if (v === undefined) return "—";
                         if (info.unit === "Rp") return `Rp ${v.toLocaleString("id-ID")}`;

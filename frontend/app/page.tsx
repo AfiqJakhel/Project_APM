@@ -6,6 +6,7 @@ import {
   fetchDashboard,
   fetchHistoris,
   fetchPrediksiAll,
+  fetchPrediksiSemuaKomoditas,
   fetchMetrik,
   type DashboardResponse,
   type HistorisDataPoint,
@@ -58,9 +59,11 @@ function statusInflasiColor(status: string): string {
    DASHBOARD PAGE
    ══════════════════════════════════════════ */
 export default function Home() {
+  const [activeKomoditas, setActiveKomoditas] = useState<"merah" | "rawit">("merah");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [historis, setHistoris] = useState<HistorisDataPoint[]>([]);
   const [prediksi, setPrediksi] = useState<PrediksiItem[]>([]);
+  const [prediksiRawit, setPrediksiRawit] = useState<PrediksiItem[]>([]);
   const [metrik, setMetrik] = useState<MetrikResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,23 +73,28 @@ export default function Home() {
       setLoading(true);
       setError(null);
       try {
-        const [dashData, histData, predData, metrikData] = await Promise.allSettled([
+        // Fetch rawit predictions via its endpoint, we can also use fetchPrediksiSemuaKomoditas
+        // tapi kita bisa panggil endpoint yang sama jika belum diganti, atau biarkan.
+        const [dashData, histData, predAllData, metrikData] = await Promise.allSettled([
           fetchDashboard(),
           fetchHistoris(60),
-          fetchPrediksiAll(),
+          fetchPrediksiSemuaKomoditas(),
           fetchMetrik(),
         ]);
 
         if (dashData.status === "fulfilled") setDashboard(dashData.value);
         if (histData.status === "fulfilled") setHistoris(histData.value.data);
-        if (predData.status === "fulfilled") setPrediksi(predData.value.prediksi);
+        if (predAllData.status === "fulfilled") {
+          setPrediksi(predAllData.value.merah.prediksi);
+          setPrediksiRawit(predAllData.value.rawit.prediksi);
+        }
         if (metrikData.status === "fulfilled") setMetrik(metrikData.value);
 
         // If all failed, show error
         if (
           dashData.status === "rejected" &&
           histData.status === "rejected" &&
-          predData.status === "rejected"
+          predAllData.status === "rejected"
         ) {
           setError("Tidak bisa terhubung ke backend. Pastikan server FastAPI berjalan di localhost:8000");
         }
@@ -104,10 +112,26 @@ export default function Home() {
     const dt = new Date(d.tanggal);
     return `${dt.getDate()}/${dt.getMonth() + 1}`;
   });
-  const chartData = historis.map((d) => d.harga_cabai_merah);
+  
+  // Ambil data sesuai komoditas aktif
+  const isRawit = activeKomoditas === "rawit";
+  const chartData = historis.map((d) => isRawit ? (d as any).harga_cabai_rawit : d.harga_cabai_merah);
+  const activePrediksi = isRawit ? prediksiRawit : prediksi;
+  
+  const currentHarga = isRawit ? dashboard?.harga_hari_ini_rawit : dashboard?.harga_hari_ini;
+  const currentTren = isRawit ? dashboard?.tren_rawit : dashboard?.tren;
+  const currentStatusInflasi = isRawit ? dashboard?.status_inflasi_rawit : dashboard?.status_inflasi;
+  const currentAvg30 = isRawit ? dashboard?.harga_rata_30hari_rawit : dashboard?.harga_rata_30hari;
+  const currentMin30 = isRawit ? dashboard?.harga_min_30hari_rawit : dashboard?.harga_min_30hari;
+  const currentMax30 = isRawit ? dashboard?.harga_max_30hari_rawit : dashboard?.harga_max_30hari;
+  const currentPredH1 = isRawit ? dashboard?.prediksi_rawit_h1 : dashboard?.prediksi_h1;
+  const currentPredH3 = isRawit ? dashboard?.prediksi_rawit_h3 : dashboard?.prediksi_h3;
+  const currentPredH7 = isRawit ? dashboard?.prediksi_rawit_h7 : dashboard?.prediksi_h7;
 
-  // Get R² from metrik
-  const r2Value = metrik?.metrik?.h1?.R2;
+  // Get R² dan MAPE dari metrik
+  const currentMetrik = isRawit ? metrik?.metrik?.rawit_h1 : metrik?.metrik?.h1;
+  const r2Value = currentMetrik?.R2;
+  const mapeValue = currentMetrik?.MAPE;
 
   return (
     <>
@@ -122,13 +146,43 @@ export default function Home() {
           </p>
         </div>
         <div className="topbar-right">
-          {dashboard && (
-            <span className={`badge ${statusInflasiColor(dashboard.status_inflasi)}`} style={{ fontSize: 11, padding: "5px 12px" }}>
-              Status: {dashboard.status_inflasi.toUpperCase()}
+          {dashboard && currentStatusInflasi && (
+            <span className={`badge ${statusInflasiColor(currentStatusInflasi)}`} style={{ fontSize: 11, padding: "5px 12px" }}>
+              Status: {currentStatusInflasi.toUpperCase()}
             </span>
           )}
         </div>
       </header>
+
+      {/* ── Komoditas Selector (Sliding Tab) ─────────────────────────── */}
+      <div style={{ padding: "0 40px", marginTop: "10px" }}>
+        <div className="sliding-tabs-container">
+          <div 
+            className="slider-bg" 
+            style={{
+              width: "50%",
+              left: activeKomoditas === "merah" ? "4px" : "calc(50% - 4px)",
+              background: "linear-gradient(90deg, #0F3E39 0%, #3F9E96 100%)"
+            }}
+          />
+          <button
+            className={`sliding-tab ${activeKomoditas === "merah" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("merah")}
+            disabled={loading}
+          >
+            Cabai Merah
+          </button>
+          <button
+            className={`sliding-tab ${activeKomoditas === "rawit" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("rawit")}
+            disabled={loading}
+          >
+            Cabai Rawit
+          </button>
+        </div>
+      </div>
 
       <div className="content-area">
         {/* Loading State */}
@@ -182,15 +236,15 @@ export default function Home() {
         {!loading && (
           <>
             {/* Alert Box */}
-            {dashboard && dashboard.status_inflasi !== "normal" && (
+            {dashboard && currentStatusInflasi && currentStatusInflasi !== "normal" && (
               <div className="alert-box animate-in delay-1">
                 <p className="alert-text">
-                  <strong>Peringatan dini:</strong> Prediksi menunjukkan harga cabai
-                  dalam status <strong>{dashboard.status_inflasi}</strong>. Tren harga{" "}
-                  <strong>{dashboard.tren}</strong> — perlu perhatian.
+                  <strong>Peringatan dini:</strong> Prediksi menunjukkan harga {isRawit ? "cabai rawit" : "cabai merah"} 
+                  dalam status <strong>{currentStatusInflasi}</strong>. Tren harga{" "}
+                  <strong>{currentTren}</strong> — perlu perhatian.
                 </p>
                 <span className="badge-siaga">
-                  {dashboard.status_inflasi === "kritis" ? "Kritis" : "Siaga"}
+                  {currentStatusInflasi === "kritis" ? "Kritis" : "Siaga"}
                 </span>
               </div>
             )}
@@ -199,24 +253,26 @@ export default function Home() {
             <div className="metrics-grid">
               <div className="metric-card metric-card--cmk animate-in delay-2">
                 <div className="metric-label">
-                  <span className="dot dot-cmk"></span>Harga hari ini — CMK
+                  <span className="dot dot-cmk" style={isRawit ? {backgroundColor: '#e65100'} : {}}></span>
+                  Harga hari ini — {isRawit ? "CRM" : "CMK"}
                 </div>
                 <div className="metric-value">
-                  {dashboard ? formatRp(dashboard.harga_hari_ini) : "—"}
+                  {dashboard ? formatRp(currentHarga) : "—"}
                 </div>
-                <div className={`metric-sub ${dashboard?.tren === "naik" ? "up" : dashboard?.tren === "turun" ? "down" : "neutral"}`}>
-                  {dashboard ? trendLabel(dashboard.tren) : "—"}
+                <div className={`metric-sub ${currentTren === "naik" ? "up" : currentTren === "turun" ? "down" : "neutral"}`}>
+                  {dashboard ? trendLabel(currentTren || "") : "—"}
                 </div>
               </div>
               <div className="metric-card metric-card--avg30 animate-in delay-3">
                 <div className="metric-label">
-                  <span className="dot dot-crm"></span>Rata-rata 30 hari
+                  <span className="dot dot-crm" style={isRawit ? {backgroundColor: '#e65100'} : {}}></span>
+                  Rata-rata 30 hari
                 </div>
                 <div className="metric-value">
-                  {dashboard ? formatRp(dashboard.harga_rata_30hari) : "—"}
+                  {dashboard ? formatRp(currentAvg30) : "—"}
                 </div>
                 <div className="metric-sub neutral">
-                  Min: {dashboard ? formatRp(dashboard.harga_min_30hari) : "—"} · Max: {dashboard ? formatRp(dashboard.harga_max_30hari) : "—"}
+                  Min: {dashboard ? formatRp(currentMin30) : "—"} · Max: {dashboard ? formatRp(currentMax30) : "—"}
                 </div>
               </div>
               <div className="metric-card metric-card--prediksi animate-in delay-4">
@@ -224,10 +280,10 @@ export default function Home() {
                   <span className="dot dot-pred"></span>Prediksi H+7
                 </div>
                 <div className="metric-value">
-                  {dashboard ? formatRp(dashboard.prediksi_h7) : "—"}
+                  {dashboard ? formatRp(currentPredH7) : "—"}
                 </div>
                 <div className="metric-sub neutral">
-                  H+1: {dashboard ? formatRp(dashboard.prediksi_h1) : "—"} · H+3: {dashboard ? formatRp(dashboard.prediksi_h3) : "—"}
+                  H+1: {dashboard ? formatRp(currentPredH1) : "—"} · H+3: {dashboard ? formatRp(currentPredH3) : "—"}
                 </div>
               </div>
               <div className="metric-card metric-card--akurasi animate-in delay-5">
@@ -238,8 +294,8 @@ export default function Home() {
                   {r2Value !== undefined ? `${(r2Value * 100).toFixed(1)}%` : "—"}
                 </div>
                 <div className="metric-sub up">
-                  {metrik?.metrik?.h1?.MAPE !== undefined
-                    ? `MAPE ${metrik.metrik.h1.MAPE.toFixed(1)}% · data uji`
+                  {mapeValue !== undefined
+                    ? `MAPE ${mapeValue.toFixed(1)}% · data uji`
                     : "—"}
                 </div>
               </div>
@@ -255,21 +311,23 @@ export default function Home() {
                 </div>
                 <div className="chart-legend">
                   <div className="legend-item">
-                    <span className="legend-line" style={{ background: "#0F6E56" }}></span>
-                    Aktual CMK
+                    <span className="legend-line" style={{ background: isRawit ? "#e65100" : "#0F6E56" }}></span>
+                    Aktual {isRawit ? "CRM" : "CMK"}
                   </div>
                   <div className="legend-item">
-                    <span className="legend-line dashed" style={{ color: "#0F6E56" }}></span>
-                    Prediksi CMK
+                    <span className="legend-line dashed" style={{ color: isRawit ? "#e65100" : "#0F6E56" }}></span>
+                    Prediksi {isRawit ? "CRM" : "CMK"}
                   </div>
                 </div>
                 <div className="chart-container" style={{ height: "320px" }}>
                   <PriceChart
                     labels={chartLabels.length > 0 ? chartLabels : undefined}
                     data={chartData.length > 0 ? chartData : undefined}
-                    prediksiH1={dashboard?.prediksi_h1}
-                    prediksiH3={dashboard?.prediksi_h3}
-                    prediksiH7={dashboard?.prediksi_h7}
+                    prediksiH1={currentPredH1}
+                    prediksiH3={currentPredH3}
+                    prediksiH7={currentPredH7}
+                    lineColor={isRawit ? "#e65100" : "#0F6E56"}
+                    datasetLabel={`Harga Aktual ${isRawit ? "Rawit" : "Merah"}`}
                   />
                 </div>
               </div>
@@ -281,9 +339,9 @@ export default function Home() {
                   <span className="badge badge-purple">XGBoost</span>
                 </div>
                 <div className="card-body">
-                  {prediksi.length > 0 ? (
+                  {activePrediksi.length > 0 ? (
                     <ul className="prediction-list">
-                      {prediksi.map((p, i) => (
+                      {activePrediksi.map((p, i) => (
                         <li key={i} className="prediction-item">
                           <span className="prediction-date">{p.keterangan}</span>
                           <span className="prediction-price">
@@ -343,7 +401,7 @@ export default function Home() {
                     <thead>
                       <tr>
                         <th>Tanggal</th>
-                        <th>Harga CMK</th>
+                        <th>Harga {isRawit ? "CRM" : "CMK"}</th>
                         <th>Perubahan</th>
                       </tr>
                     </thead>
@@ -351,13 +409,14 @@ export default function Home() {
                       {historis.length > 0 ? (
                         historis.slice(-7).reverse().map((row, i) => {
                           const idx = historis.length - 1 - i;
-                          const prev = idx > 0 ? historis[idx - 1]?.harga_cabai_merah : null;
-                          const change = prev ? ((row.harga_cabai_merah - prev) / prev * 100) : 0;
+                          const prev = idx > 0 ? (isRawit ? (historis[idx - 1] as any).harga_cabai_rawit : historis[idx - 1]?.harga_cabai_merah) : null;
+                          const currentRowVal = isRawit ? (row as any).harga_cabai_rawit : row.harga_cabai_merah;
+                          const change = prev && prev > 0 ? ((currentRowVal - prev) / prev * 100) : 0;
                           const statusClass = change > 0 ? "status-naik" : change < 0 ? "status-stabil" : "status-plus";
                           return (
                             <tr key={i}>
                               <td>{new Date(row.tanggal).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</td>
-                              <td>{formatRp(row.harga_cabai_merah)}</td>
+                              <td>{formatRp(currentRowVal)}</td>
                               <td>
                                 <span className={`status-badge ${statusClass}`}>
                                   {change > 0 ? "+" : ""}{change.toFixed(1)}%

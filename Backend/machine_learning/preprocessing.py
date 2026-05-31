@@ -296,11 +296,17 @@ def merge_data(df_harga, df_cuaca, df_libur) -> pd.DataFrame:
     df.sort_values("tanggal", inplace=True)
     df.reset_index(drop=True, inplace=True)
 
+    # PERBAIKAN: Cuaca dari 2024 diback-fill ke 2022-2023 agar data harga 2022 tetap bisa dipakai
+    cuaca_cols = ["suhu_rata", "kelembaban", "curah_hujan", "lama_penyinaran", "kec_angin"]
+    for col in cuaca_cols:
+        if col in df.columns:
+            df[col] = df[col].bfill().ffill()
+
     for col in ["suhu_rata", "kelembaban", "curah_hujan"]:
         if col in df.columns:
             pct = df[col].isna().mean() * 100
             if pct > 30:
-                log(f"    ! '{col}': {pct:.1f}% missing setelah merge")
+                log(f"    ! '{col}': {pct:.1f}% missing setelah merge (sudah di-bfill ke 2022)")
 
     log(f"    -> Shape setelah merge  : {df.shape}")
     log(f"    -> Hari libur ditandai  : {df['is_libur_nasional'].sum()} hari")
@@ -321,6 +327,12 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     # Enkode siklus bulanan dengan sin/cos (menggantikan bulan mentah)
     df["bulan_sin"] = np.sin(2 * np.pi * df["bulan"] / 12)
     df["bulan_cos"] = np.cos(2 * np.pi * df["bulan"] / 12)
+    
+    # BARU: Enkode siklus mingguan (1-52) untuk H+3
+    df["minggu_ke"] = df["tanggal"].dt.isocalendar().week.astype(int)
+    df["minggu_sin"] = np.sin(2 * np.pi * df["minggu_ke"] / 52)
+    df["minggu_cos"] = np.cos(2 * np.pi * df["minggu_ke"] / 52)
+    df.drop(columns=["minggu_ke"], inplace=True)
     # Catatan: tahun, hari_bulan, hari_minggu, hari_sin/cos, hari_dlm_tahun,
     #          minggu_ke dihapus — tidak berpola signifikan untuk harga cabai
 
@@ -350,10 +362,21 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
     df["is_musim_panen"] = df["bulan"].isin([5, 6, 7, 11, 12, 1]).astype(int)
 
+    # BARU: Jarak hari ke Lebaran terdekat (kontinu, 2-arah)
+    # Lebih informatif dari is_pra_lebaran (biner) karena model bisa melihat
+    # seberapa dekat dengan hari raya secara gradual
+    _lebaran_dates = pd.to_datetime(
+        ["2022-05-02", "2023-04-22", "2024-04-10", "2025-03-30", "2026-03-20"]
+    )
+    df["days_to_lebaran"] = df["tanggal"].apply(
+        lambda t: int(min(abs((t - d).days) for d in _lebaran_dates))
+    )
+    log(f"    -> days_to_lebaran ditambahkan ke preprocessing (konsistensi training-inference)")
+
     # ── C. Lag harga (selektif — hapus lag berkorelasi tinggi) ────────────
     # Simpan: lag_1 (kemarin), lag_7 (minggu lalu), lag_14 (dua minggu),
-    #         lag_30 (sebulan lalu). Hapus: lag_2, lag_3, lag_21 (redundan)
-    for lag in [1, 7, 14, 30]:
+    #         lag_21 (tiga minggu), lag_30 (sebulan lalu). Hapus: lag_2, lag_3
+    for lag in [1, 7, 14, 21, 30]:
         df[f"lag_{lag}"] = df[TARGET].shift(lag)
 
     if "harga_cabai_rawit" in df.columns:
@@ -361,17 +384,34 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
         df["rawit_lag_1"] = df["harga_cabai_rawit"].shift(1)
         df["rawit_lag_7"] = df["harga_cabai_rawit"].shift(7)
 
-    # ── D. Rolling statistics (hanya window 7 & 30, tanpa min/max) ────────
+        # BARU: Lag rawit jangka menengah-panjang
+        # SHAP menunjukkan rawit_lag_1 dan rawit_lag_7 dominan -> lag lebih jauh
+        # memberi model perspektif tren historis substitusi
+        df["rawit_lag_14"] = df["harga_cabai_rawit"].shift(14)
+        df["rawit_lag_30"] = df["harga_cabai_rawit"].shift(30)
+
+        # BARU: Rasio spread harga merah vs rawit
+        # Jika rasio tinggi (merah relatif mahal), ekspektasi koreksi harga merah turun
+        df["rasio_merah_rawit"] = (
+            df[TARGET] / df["harga_cabai_rawit"].replace(0, np.nan)
+        ).fillna(1.0)
+
+    # ── D. Rolling statistics & EMA (hanya window 7 & 30) ────────
     # min/max di-drop: informasinya sudah tercakup oleh mean + std
-    # Window 3 dan 14 di-drop: marginal di antara 7 dan 30
+    s_base = df[TARGET].shift(1)
     for w in [7, 30]:
-        s = df[TARGET].shift(1)
-        df[f"roll_mean_{w}"] = s.rolling(w).mean()
-        df[f"roll_std_{w}"] = s.rolling(w).std()
+        df[f"roll_mean_{w}"] = s_base.rolling(w).mean()
+        df[f"roll_std_{w}"] = s_base.rolling(w).std()
+        df[f"ema_{w}"] = s_base.ewm(span=w, adjust=False).mean()
+        
+    df["ema_crossover_7_30"] = df["ema_7"] - df["ema_30"]
 
     # ── E. Momentum (hanya jangka pendek) ─────────────────────────────────
     # momentum_30 dan pct_change di-drop: berkorelasi tinggi dengan momentum_7
     df["momentum_7"] = df[TARGET].shift(1) - df[TARGET].shift(7)
+    
+    # BARU: Momentum 3 hari (sangat penting untuk horizon H+3)
+    df["momentum_3"] = df[TARGET].shift(1) - df[TARGET].shift(4)
 
     # ── F. Fitur tren & volatilitas (BARU) ────────────────────────────────
     # Rasio tren: apakah harga minggu ini naik lebih cepat dari tren bulanan?
@@ -384,14 +424,36 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     roll14_std = df[TARGET].shift(1).rolling(14).std()
     df["volatilitas_14"] = (roll14_std / roll14_mean).fillna(0)
 
-    # ── G. Cuaca (hanya fitur utama + akumulasi hujan jangka panjang) ─────
-    # Dihapus: kelembaban, kec_angin, lama_penyinaran (korelasi tinggi dgn
-    #          curah_hujan), roll_suhu_*, roll_hujan_7, roll_hr_hujan_30,
-    #          roll_kelembaban_7 (redundan)
+    # ── G. Cuaca (fitur utama + akumulasi hujan jangka menengah-panjang) ──
+    # Ditambahkan: lag_hujan_14, lag_hujan_21, roll_hujan_14, roll_hujan_21
+    # Reasoning: dampak curah hujan terhadap harga cabai baru terasa 2-4 minggu
+    # kemudian karena sesuai dengan siklus panen cabai di Sumatera Barat.
+    # roll_hujan_30 dipertahankan untuk dampak jangka panjang (1 bulan).
     if "curah_hujan" in df.columns:
-        df["roll_hujan_30"] = df["curah_hujan"].rolling(30, min_periods=1).sum()
+        df["lag_hujan_14"]  = df["curah_hujan"].shift(14)   # hujan 2 minggu lalu
+        df["lag_hujan_21"]  = df["curah_hujan"].shift(21)   # hujan 3 minggu lalu
+        df["roll_hujan_14"] = df["curah_hujan"].rolling(14, min_periods=1).sum()  # akumulasi 2 minggu
+        df["roll_hujan_21"] = df["curah_hujan"].rolling(21, min_periods=1).sum()  # akumulasi 3 minggu
+        df["roll_hujan_30"] = df["curah_hujan"].rolling(30, min_periods=1).sum()  # akumulasi 1 bulan
+
+        # BARU: Fitur makro jangka panjang (siklus tanam ~2 bulan)
+        # Reasoning: cabai butuh 60-90 hari dari tanam hingga panen.
+        # Curah hujan selama periode ini menentukan total volume pasokan ke pasar.
+        df["roll_hujan_60"] = df["curah_hujan"].rolling(60, min_periods=1).sum()  # akumulasi 2 bulan
+
+        # BARU: Anomali cuaca ekstrem 3 hari terakhir
+        # Reasoning: hujan > 50mm/hari menyebabkan cabai busuk & distribusi terganggu.
+        # Dampaknya terasa dalam 1-3 hari, bukan 2 minggu.
+        df["hujan_ekstrem_3hari"] = (
+            (df["curah_hujan"] > 50).rolling(3, min_periods=1).sum().astype(int)
+        )
+
+        # BARU: Hujan ekstrem seketika (H+3)
+        df["max_hujan_7"] = df["curah_hujan"].rolling(7, min_periods=1).max()
+
         df["is_hari_hujan"] = (df["curah_hujan"] > 1.0).astype(int)
     # suhu_rata dan curah_hujan dipertahankan langsung dari merge
+
 
     # ── H. Fitur Arah Pergerakan Harga (ANTI-LEAKAGE) ────────────────────
     # PENTING: Semua fitur arah menggunakan shift(1) agar hanya melihat masa lalu.
@@ -411,7 +473,7 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
     # Streak naik yang aman: berapa dari 3 hari terakhir harga naik? (nilai 0–3)
     # Berbeda dari versi lama (cumcount dari arah_1 yang bocor)
-    df["streak_naik"] = (
+    df["streak_naik_3"] = (
         pd.DataFrame({
             "a1": df["arah_lag1"],
             "a2": df["arah_lag2"],
@@ -426,38 +488,71 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     df["prop_naik_14"] = (diff_safe > 0).rolling(14, min_periods=7).mean()
 
     # Pastikan kolom bocor lama tidak ada di dataset output
-    _kolom_bocor = ["selisih_harga_1", "selisih_harga_7", "arah_1", "arah_7"]
+    _kolom_bocor = ["selisih_harga_1", "selisih_harga_7", "arah_1", "arah_7", "streak_naik"]
     df.drop(columns=[c for c in _kolom_bocor if c in df.columns], inplace=True)
     log(f"    -> Kolom bocor dihapus    : {[c for c in _kolom_bocor]}")
     log(f"    -> Fitur arah baru (aman) : pct_change_1/3/7, arah_lag1/2/3, "
-        f"streak_naik (0-3), prop_naik_7/14")
+        f"streak_naik_3 (0-3), prop_naik_7/14")
 
     # ── I. Fitur konteks historis (PERBAIKAN 4) ───────────────────────────
     # Tahun 2022 = masa pemulihan pasca-COVID, pola harga sangat tidak normal
     # Model perlu "diberitahu" bahwa data 2022 memiliki karakter berbeda
     df["is_pasca_covid"] = (df["tanggal"].dt.year == 2022).astype(int)
 
-    # ── J. Target multi-horizon (PERBAIKAN 3) ─────────────────────────────
-    # Membuat kolom target untuk prediksi H+1, H+3, H+7
-    # shift(-n) = ambil nilai n hari ke depan sebagai target
-    # Kolom ini TIDAK dimasukkan ke feature_cols, hanya dipakai saat training
-    df["target_h1"] = df[TARGET].shift(-1)  # prediksi besok
-    df["target_h3"] = df[TARGET].shift(-3)  # prediksi 3 hari ke depan
-    df["target_h7"] = df[TARGET].shift(-7)  # prediksi 7 hari ke depan
+    # ── J. Target multi-horizon — DETRENDING (PERBAIKAN DOMINASI lag_1) ──
+    # Menggunakan DELTA (perubahan harga) sebagai target, bukan harga absolut.
+    # Tujuan: mengurangi dominasi lag_1 yang menyebabkan model berperilaku seperti
+    # Naive Forecast. Dengan delta, model dipaksa belajar faktor perubahan, bukan
+    # sekadar mengingat harga kemarin.
+    #
+    # Saat inference: prediksi_harga = harga_hari_ini + prediksi_delta
+    # Kolom harga_hari_ini disimpan sebagai referensi inverse transform.
+    #
+    # CATATAN: Kolom ini TIDAK dimasukkan ke feature_cols, hanya dipakai training.
 
-    # Target klasifikasi: 1 jika harga target > harga hari ini, 0 jika tidak (turun/tetap)
-    df["arah_target_h1"] = (df["target_h1"] > df[TARGET]).astype(int)
-    df["arah_target_h3"] = (df["target_h3"] > df[TARGET]).astype(int)
-    df["arah_target_h7"] = (df["target_h7"] > df[TARGET]).astype(int)
+    # Simpan harga hari ini sebagai referensi untuk inverse transform
+    df["harga_hari_ini"] = df[TARGET]
 
-    # Karena target numerik di-shift, kita perlu memastikan baris terakhir target klasifikasi
-    # menjadi NaN agar sejalan dengan target regresi (mencegah evaluasi pada target palsu)
+    # ── J. Target multi-horizon — LOG-RETURN (menggantikan delta absolut) ──
+    # Log-return: target = ln(harga_besok / harga_hari_ini)
+    # Keunggulan vs delta absolut:
+    #   - Scale-free: Rp5000 dari Rp25000 (20%) ≠ Rp5000 dari Rp80000 (6%)
+    #   - Distribusi lebih mendekati normal → lebih mudah dipelajari XGBoost
+    #   - Simetris: naik 10% lalu turun 10% kembali ke titik awal
+    #
+    # Inverse transform saat inference: prediksi_rp = harga_hari_ini * exp(log_return)
+    # CATATAN: Kolom ini TIDAK dimasukkan ke feature_cols, hanya dipakai training.
+
+    # Hindari log(0) atau log(negatif) — ganti nilai non-positif dengan NaN
+    harga_safe = df[TARGET].replace(0, np.nan)
+
+    # Target merah: log-return H+1, H+3, H+7
+    df["target_h1"] = np.log(df[TARGET].shift(-1) / harga_safe)  # log-return H+1
+    df["target_h3"] = np.log(df[TARGET].shift(-3) / harga_safe)  # log-return H+3
+    df["target_h7"] = np.log(df[TARGET].shift(-7) / harga_safe)  # log-return H+7
+
+    # Target klasifikasi arah (tetap dipertahankan — 1=naik, 0=turun/tetap)
+    df["arah_target_h1"] = (df["target_h1"] > 0).astype(int)
+    df["arah_target_h3"] = (df["target_h3"] > 0).astype(int)
+    df["arah_target_h7"] = (df["target_h7"] > 0).astype(int)
+
+    # Pastikan target klasifikasi ikut NaN jika target regresi NaN
     df.loc[df["target_h1"].isna(), "arah_target_h1"] = np.nan
     df.loc[df["target_h3"].isna(), "arah_target_h3"] = np.nan
     df.loc[df["target_h7"].isna(), "arah_target_h7"] = np.nan
 
+    # ── K. Target rawit multi-horizon — LOG-RETURN ─────────────────────────
+    if "harga_cabai_rawit" in df.columns:
+        df["harga_rawit_hari_ini"] = df["harga_cabai_rawit"]
+        rawit_safe = df["harga_cabai_rawit"].replace(0, np.nan)
+        df["target_rawit_h1"] = np.log(df["harga_cabai_rawit"].shift(-1) / rawit_safe)
+        df["target_rawit_h3"] = np.log(df["harga_cabai_rawit"].shift(-3) / rawit_safe)
+        df["target_rawit_h7"] = np.log(df["harga_cabai_rawit"].shift(-7) / rawit_safe)
+        log(f"    -> Target rawit (log-return): target_rawit_h1, target_rawit_h3, target_rawit_h7")
+
     log(f"    -> Total fitur dibuat : {df.shape[1] - 2}")
-    log(f"    -> Kolom target multi-horizon: target_h1, target_h3, target_h7")
+    log(f"    -> Target merah (log-return): target_h1, target_h3, target_h7")
+    log(f"    -> Referensi inverse transform: harga_hari_ini * exp(log_return)")
     return df
 
 
@@ -489,11 +584,22 @@ def seleksi_fitur(df: pd.DataFrame, feature_cols: list) -> list:
     # Hitung jumlah korelasi tinggi tiap fitur (untuk memilih yg dihapus)
     high_corr_count = (corr_matrix > 0.95).sum() - 1  # kurangi diagonal
 
+    # BARU: Daftar fitur yang kebal dari penghapusan korelasi otomatis (Fokus H+3)
+    WHITELIST = {
+        "lag_14", "lag_21", "rawit_lag_14", "rawit_lag_30", 
+        "roll_hujan_14", "roll_hujan_21", "roll_hujan_60", "max_hujan_7",
+        "ema_7", "ema_30", "ema_crossover_7_30"
+    }
+
     to_drop = set()
     cols = list(corr_matrix.columns)
     for i in range(len(cols)):
         for j in range(i + 1, len(cols)):
             if corr_matrix.iloc[i, j] > 0.95:
+                # Jangan hapus jika masuk whitelist
+                if cols[i] in WHITELIST or cols[j] in WHITELIST:
+                    continue
+                    
                 # Hapus fitur yang paling banyak berkorelasi dengan fitur lain
                 if cols[i] not in to_drop and cols[j] not in to_drop:
                     if high_corr_count[cols[i]] >= high_corr_count[cols[j]]:
@@ -525,19 +631,6 @@ def final_cleaning(df: pd.DataFrame) -> pd.DataFrame:
 
     lag_cols = [c for c in df.columns if c.startswith("lag_")]
     df.dropna(subset=lag_cols, inplace=True)
-
-    # PERBAIKAN 5: cuaca_cols diperlengkap — semua kolom cuaca mentah di-ffill
-    # sebelumnya hanya suhu_rata dan curah_hujan, sisanya bisa lolos NaN
-    cuaca_cols = [
-        "suhu_rata",
-        "kelembaban",
-        "curah_hujan",
-        "lama_penyinaran",
-        "kec_angin",
-    ]
-    for col in cuaca_cols:
-        if col in df.columns:
-            df[col] = df[col].ffill().bfill()
 
     # PERBAIKAN LEAKAGE 2: Imputasi median hanya dari bagian train (80% pertama)
     # Alasan: median global menyertakan distribusi data test → bocor ke depan.
@@ -649,23 +742,11 @@ def simpan_output(
         f"{df_asli.shape[1]} kolom, nilai asli)"
     )
 
-    # Train & test split — dari df_scaled
+    # Catatan: train.csv dan test.csv sudah dihapus karena pipeline XGBoost
+    # menggunakan Expanding Window langsung dari dataset_preprocessed.csv
+
     # Baris paling akhir yang tidak punya target_h7 (7 hari terakhir) dibuang
     df_for_split = df_scaled.dropna(subset=target_cols).reset_index(drop=True)
-    split_idx2 = int(len(df_for_split) * 0.8)
-
-    df_train_out = df_for_split.iloc[:split_idx2].reset_index(drop=True)
-    df_test_out = df_for_split.iloc[split_idx2:].reset_index(drop=True)
-    df_train_out.to_csv(OUTPUT_DIR / "train.csv", index=False)
-    df_test_out.to_csv(OUTPUT_DIR / "test.csv", index=False)
-    log(
-        f"    + train.csv  ({len(df_train_out):,} baris, "
-        f"s/d {df_train_out.iloc[-1]['tanggal'].date()})"
-    )
-    log(
-        f"    + test.csv   ({len(df_test_out):,} baris, "
-        f"mulai {df_test_out.iloc[0]['tanggal'].date()})"
-    )
     log(
         f"    + Baris dibuang (target_h7 NaN): " f"{len(df_scaled) - len(df_for_split)}"
     )
@@ -686,20 +767,21 @@ def simpan_output(
     log(f"    + info_fitur.csv     ({len(feature_cols)} fitur setelah seleksi)")
 
     # Daftar target multi-horizon untuk referensi train.py
-    target_info = pd.DataFrame(
-        {
-            "target": [TARGET] + target_cols,
-            "keterangan": [
-                "Harga aktual hari ini (referensi)",
-                "Prediksi H+1 (besok)",
-                "Prediksi H+3 (3 hari ke depan)",
-                "Prediksi H+7 (7 hari ke depan)",
-                "Arah Prediksi H+1 (1=Naik, 0=Turun/Tetap)",
-                "Arah Prediksi H+3 (1=Naik, 0=Turun/Tetap)",
-                "Arah Prediksi H+7 (1=Naik, 0=Turun/Tetap)",
-            ],
-        }
-    )
+    target_info_data = []
+    for col in [TARGET] + target_cols:
+        if col == TARGET:
+            desc = "Harga aktual hari ini (referensi)"
+        elif "rawit" in col and "target" in col:
+            desc = f"Prediksi Rawit {col.split('_')[-1]} (delta)"
+        elif "arah_target" in col:
+            desc = f"Arah Prediksi {col.split('_')[-1]} (1=Naik, 0=Turun/Tetap)"
+        elif "target_h" in col:
+            desc = f"Prediksi Merah {col.split('_')[-1]} (delta)"
+        else:
+            desc = f"Referensi: {col}"
+        target_info_data.append({"target": col, "keterangan": desc})
+        
+    target_info = pd.DataFrame(target_info_data)
     target_info.to_csv(OUTPUT_DIR / "info_target.csv", index=False)
     log(f"    + info_target.csv    ({len(target_info)} target)")
 
@@ -741,13 +823,17 @@ def main():
     df_feat = feature_engineering(df_merged)
     df_final = final_cleaning(df_feat)
 
-    # PERBAIKAN 2: Hapus hardcode exclude cuaca — biarkan seleksi_fitur()
-    # yang memutuskan mana yang redundan berdasarkan data aktual.
+    # Semua kolom yang merupakan target atau referensi inverse transform
+    # harus di-exclude dari feature set — jangan pernah jadi input model.
     TARGET_COLS = [
         "target_h1", "target_h3", "target_h7",
-        "arah_target_h1", "arah_target_h3", "arah_target_h7"
+        "target_rawit_h1", "target_rawit_h3", "target_rawit_h7",
+        "arah_target_h1", "arah_target_h3", "arah_target_h7",
     ]
-    exclude = ["tanggal", TARGET, "harga_cabai_rawit"] + TARGET_COLS
+    # Kolom referensi inverse transform — bukan fitur, hanya dipakai saat training/eval
+    REF_COLS = ["harga_hari_ini", "harga_rawit_hari_ini"]
+
+    exclude = ["tanggal", TARGET, "harga_cabai_rawit"] + TARGET_COLS + REF_COLS
     feature_cols = [
         c
         for c in df_final.columns
@@ -759,13 +845,16 @@ def main():
     # Seleksi fitur otomatis (hapus redundan & berkorelasi tinggi)
     feature_cols = seleksi_fitur(df_final, feature_cols)
 
-    df_scaled, scaler, feature_cols = normalisasi(df_final, feature_cols, TARGET_COLS)
-    simpan_output(df_final, df_scaled, feature_cols, TARGET_COLS)
+    df_scaled, scaler, feature_cols = normalisasi(df_final, feature_cols, TARGET_COLS + REF_COLS)
+    simpan_output(df_final, df_scaled, feature_cols, TARGET_COLS + REF_COLS)
 
-    log("\n[SELESAI] Preprocessing v4 berhasil!")
+    log("\n[SELESAI] Preprocessing v5 berhasil!")
     log(f"  Target utama    : {TARGET}")
-    log(f"  Target tambahan : target_h1, target_h3, target_h7")
-    log(f"  Fitur           : {len(feature_cols)} fitur siap untuk XGBoost")
+    log(f"  Target merah (delta) : target_h1, target_h3, target_h7")
+    log(f"  Target rawit (delta) : target_rawit_h1, target_rawit_h3, target_rawit_h7")
+    log(f"  Referensi inverse    : harga_hari_ini, harga_rawit_hari_ini")
+    log(f"  Fitur baru cuaca     : lag_hujan_14, lag_hujan_21, roll_hujan_14, roll_hujan_21")
+    log(f"  Fitur total          : {len(feature_cols)} fitur siap untuk XGBoost")
     log(f"  Output          : {OUTPUT_DIR}")
     log(f"  Scaler          : {MODEL_DIR / 'scaler.pkl'}")
 

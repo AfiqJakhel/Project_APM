@@ -61,6 +61,9 @@ export interface MetrikResponse {
     h1: MetrikHorizon;
     h3: MetrikHorizon;
     h7: MetrikHorizon;
+    rawit_h1?: MetrikHorizon;
+    rawit_h3?: MetrikHorizon;
+    rawit_h7?: MetrikHorizon;
   };
 }
 
@@ -71,6 +74,9 @@ export interface HealthResponse {
     h1: boolean;
     h3: boolean;
     h7: boolean;
+    rawit_h1?: boolean;
+    rawit_h3?: boolean;
+    rawit_h7?: boolean;
   };
   scaler: boolean;
   dataset: boolean;
@@ -91,6 +97,9 @@ export interface ModelInfoResponse {
     h1: ModelInfoHorizon;
     h3: ModelInfoHorizon;
     h7: ModelInfoHorizon;
+    rawit_h1?: ModelInfoHorizon;
+    rawit_h3?: ModelInfoHorizon;
+    rawit_h7?: ModelInfoHorizon;
   };
   dataset_info: {
     total_baris: number;
@@ -102,6 +111,7 @@ export interface ModelInfoResponse {
 
 export interface DashboardResponse {
   tanggal_update: string;
+  // Cabai Merah
   harga_hari_ini: number;
   harga_min_30hari: number;
   harga_max_30hari: number;
@@ -110,9 +120,22 @@ export interface DashboardResponse {
   prediksi_h1: number | null;
   prediksi_h3: number | null;
   prediksi_h7: number | null;
+  status_inflasi: string;
+  
+  // Cabai Rawit
+  harga_hari_ini_rawit?: number | null;
+  harga_min_30hari_rawit?: number | null;
+  harga_max_30hari_rawit?: number | null;
+  harga_rata_30hari_rawit?: number | null;
+  tren_rawit?: string | null;
+  prediksi_rawit_h1?: number | null;
+  prediksi_rawit_h3?: number | null;
+  prediksi_rawit_h7?: number | null;
+  status_inflasi_rawit?: string | null;
+
+  // Global
   status_model: boolean;
   n_model_aktif: number;
-  status_inflasi: string;
 }
 
 export interface HistoryRecord {
@@ -162,9 +185,23 @@ export async function fetchDashboard(): Promise<DashboardResponse> {
   return apiFetch<DashboardResponse>("/api/dashboard/");
 }
 
-/** Prediksi semua horizon sekaligus */
+/** Prediksi semua horizon sekaligus (hanya merah) */
 export async function fetchPrediksiAll(): Promise<PrediksiAllResponse> {
   return apiFetch<PrediksiAllResponse>("/api/predict/prediksi");
+}
+
+export interface PrediksiSemuaKomoditasResponse {
+  merah: PrediksiAllResponse;
+  rawit: PrediksiAllResponse;
+}
+
+/** Fetch prediksi merah dan rawit secara paralel */
+export async function fetchPrediksiSemuaKomoditas(): Promise<PrediksiSemuaKomoditasResponse> {
+  const [merah, rawit] = await Promise.all([
+    apiFetch<PrediksiAllResponse>("/api/predict/prediksi"),
+    apiFetch<PrediksiAllResponse>("/api/predict/prediksi/rawit")
+  ]);
+  return { merah, rawit };
 }
 
 /** Prediksi satu horizon */

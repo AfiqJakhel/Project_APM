@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import {
   fetchDashboard,
-  fetchPrediksiAll,
+  fetchPrediksiSemuaKomoditas,
   fetchHealth,
   type DashboardResponse,
-  type PrediksiItem,
+  type PrediksiSemuaKomoditasResponse,
   type HealthResponse,
 } from "../lib/api";
 
@@ -16,8 +16,9 @@ function formatRp(value: number | null | undefined): string {
 }
 
 export default function RekapPage() {
+  const [activeKomoditas, setActiveKomoditas] = useState<"merah" | "rawit">("merah");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [prediksi, setPrediksi] = useState<PrediksiItem[]>([]);
+  const [prediksiAll, setPrediksiAll] = useState<PrediksiSemuaKomoditasResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,11 +29,11 @@ export default function RekapPage() {
       try {
         const [d, p, h] = await Promise.allSettled([
           fetchDashboard(),
-          fetchPrediksiAll(),
+          fetchPrediksiSemuaKomoditas(),
           fetchHealth(),
         ]);
         if (d.status === "fulfilled") setDashboard(d.value);
-        if (p.status === "fulfilled") setPrediksi(p.value.prediksi);
+        if (p.status === "fulfilled") setPrediksiAll(p.value);
         if (h.status === "fulfilled") setHealth(h.value);
         if (d.status === "rejected" && p.status === "rejected") {
           setError("Tidak bisa terhubung ke backend");
@@ -53,6 +54,16 @@ export default function RekapPage() {
     year: "numeric",
   });
 
+  const isRawit = activeKomoditas === "rawit";
+  const currentHarga = isRawit ? dashboard?.harga_hari_ini_rawit : dashboard?.harga_hari_ini;
+  const currentAvg30 = isRawit ? dashboard?.harga_rata_30hari_rawit : dashboard?.harga_rata_30hari;
+  const currentMin30 = isRawit ? dashboard?.harga_min_30hari_rawit : dashboard?.harga_min_30hari;
+  const currentMax30 = isRawit ? dashboard?.harga_max_30hari_rawit : dashboard?.harga_max_30hari;
+  const currentTren = isRawit ? dashboard?.tren_rawit : dashboard?.tren;
+  const currentStatusInflasi = isRawit ? dashboard?.status_inflasi_rawit : dashboard?.status_inflasi;
+  
+  const prediksi = isRawit ? (prediksiAll?.rawit?.prediksi || []) : (prediksiAll?.merah?.prediksi || []);
+
   return (
     <>
       <header className="topbar">
@@ -61,6 +72,36 @@ export default function RekapPage() {
           <p>{today}</p>
         </div>
       </header>
+
+      {/* ── Komoditas Selector (Sliding Tab) ─────────────────────────── */}
+      <div style={{ padding: "0 40px", marginTop: "10px" }}>
+        <div className="sliding-tabs-container">
+          <div 
+            className="slider-bg" 
+            style={{
+              width: "50%",
+              left: activeKomoditas === "merah" ? "4px" : "calc(50% - 4px)",
+              background: "linear-gradient(90deg, #0F3E39 0%, #3F9E96 100%)"
+            }}
+          />
+          <button
+            className={`sliding-tab ${activeKomoditas === "merah" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("merah")}
+            disabled={loading}
+          >
+            Cabai Merah
+          </button>
+          <button
+            className={`sliding-tab ${activeKomoditas === "rawit" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("rawit")}
+            disabled={loading}
+          >
+            Cabai Rawit
+          </button>
+        </div>
+      </div>
 
       <div className="content-area">
         {loading && (
@@ -119,31 +160,31 @@ export default function RekapPage() {
               <div className="card-header">
                 <h3>Ringkasan Hari Ini</h3>
                 <span className={`badge ${
-                  dashboard.status_inflasi === "kritis" ? "badge-red" :
-                  dashboard.status_inflasi === "waspada" ? "badge-yellow" : "badge-green"
+                  currentStatusInflasi === "kritis" ? "badge-red" :
+                  currentStatusInflasi === "waspada" ? "badge-yellow" : "badge-green"
                 }`}>
-                  {dashboard.status_inflasi.toUpperCase()}
+                  {currentStatusInflasi?.toUpperCase()}
                 </span>
               </div>
               <div className="card-body">
                 <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
                   <div className="metric-card">
                     <div className="metric-label">Harga Hari Ini</div>
-                    <div className="metric-value" style={{ fontSize: 24 }}>{formatRp(dashboard.harga_hari_ini)}</div>
-                    <div className={`metric-sub ${dashboard.tren === "naik" ? "up" : "neutral"}`}>
-                      Tren: {dashboard.tren}
+                    <div className="metric-value" style={{ fontSize: 24 }}>{formatRp(currentHarga)}</div>
+                    <div className={`metric-sub ${currentTren === "naik" ? "up" : "neutral"}`}>
+                      Tren: {currentTren}
                     </div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-label">Rata-rata 30 Hari</div>
-                    <div className="metric-value" style={{ fontSize: 24 }}>{formatRp(dashboard.harga_rata_30hari)}</div>
+                    <div className="metric-value" style={{ fontSize: 24 }}>{formatRp(currentAvg30)}</div>
                     <div className="metric-sub neutral">
-                      Min: {formatRp(dashboard.harga_min_30hari)}
+                      Min: {formatRp(currentMin30)}
                     </div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-label">Maks 30 Hari</div>
-                    <div className="metric-value" style={{ fontSize: 24 }}>{formatRp(dashboard.harga_max_30hari)}</div>
+                    <div className="metric-value" style={{ fontSize: 24 }}>{formatRp(currentMax30)}</div>
                     <div className="metric-sub neutral">
                       {dashboard.n_model_aktif} model aktif
                     </div>

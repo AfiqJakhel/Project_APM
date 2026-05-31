@@ -20,26 +20,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core import predictor
-from app.core.scheduler import setup_scheduler, stop_scheduler
-from app.routes import predict, history, dashboard, realtime, cache, admin
+from app.routes import predict, history, dashboard
 
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# INITIAL UPDATE — dijalankan saat startup, non-blocking
-# =============================================================================
-async def _initial_update():
-    """Update data sekali saat startup agar data selalu fresh saat server restart."""
-    await asyncio.sleep(5)   # Tunggu model selesai load dulu
-    try:
-        from app.core.scraper import jalankan_update_realtime
-        logger.info("[Startup] Menjalankan initial update real-time...")
-        await jalankan_update_realtime()
-        logger.info("[Startup] Initial update selesai")
-    except Exception as e:
-        logger.warning(f"[Startup] Initial update gagal (tidak masalah): {e}")
-
-
+# (Scraping dan scheduler realtime dimatikan sesuai permintaan user)
 # =============================================================================
 # LIFESPAN EVENT — load model, dataset, dan scheduler saat startup
 # =============================================================================
@@ -51,29 +37,23 @@ async def lifespan(app: FastAPI):
     predictor.load_dataset_to_cache()
 
     info = predictor.get_cache_info()
-    models_loaded = info.get("models_loaded", [])
-    if models_loaded:
-        print(f"[Startup] Model siap: {models_loaded}")
+    models_merah = info.get("models_merah", [])
+    models_rawit = info.get("models_rawit", [])
+    if models_merah:
+        print(f"[Startup] Model merah siap : {models_merah}")
     else:
-        print("[Startup] WARNING: Tidak ada model yang berhasil dimuat!")
+        print("[Startup] WARNING: Tidak ada model merah yang dimuat!")
+    if models_rawit:
+        print(f"[Startup] Model rawit siap : {models_rawit}")
+    else:
+        print("[Startup] INFO: Model rawit belum tersedia (jalankan train_rawit.py)")
 
-    # Setup scheduler harian otomatis
-    try:
-        setup_scheduler()
-    except Exception as e:
-        print(f"[Startup] Scheduler gagal start (tidak masalah): {e}")
-
-    # Initial update — non-blocking background task
-    asyncio.create_task(_initial_update())
+    # (Scheduler dan initial update dimatikan)
 
     yield
 
     # Shutdown
     print("\n[Shutdown] Membersihkan resources...")
-    try:
-        stop_scheduler()
-    except Exception:
-        pass
     predictor.clear_cache()
 
 
@@ -117,17 +97,22 @@ app.add_middleware(
 @app.get("/", tags=["Root"])
 def root():
     """Cek status API dan model."""
+    info = predictor.get_cache_info()
     return {
-        "status"      : "running",
-        "message"     : "API Prediksi Harga Cabai Kota Padang",
-        "model_ready" : len(predictor.get_cache_info().get("models_loaded", [])) > 0,
-        "model_aktif" : predictor.get_cache_info().get("models_loaded", []),
-        "endpoints"   : {
-            "docs"      : "/docs",
-            "prediksi"  : "/api/predict",
-            "historis"  : "/api/history",
-            "dashboard" : "/api/dashboard",
-            "realtime"  : "/api/realtime",
+        "status"       : "running",
+        "message"      : "API Prediksi Harga Cabai Kota Padang (Merah + Rawit)",
+        "model_merah"  : info.get("models_merah", []),
+        "model_rawit"  : info.get("models_rawit", []),
+        "merah_ready"  : len(info.get("models_merah", [])) > 0,
+        "rawit_ready"  : len(info.get("models_rawit", [])) > 0,
+        "endpoints"    : {
+            "docs"              : "/docs",
+            "prediksi_merah"    : "/api/predict/prediksi/{h1|h3|h7}",
+            "prediksi_rawit"    : "/api/predict/prediksi/rawit/{h1|h3|h7}",
+            "prediksi_semua"    : "/api/predict/prediksi/semua",
+            "historis"          : "/api/predict/harga/historis",
+            "dashboard"         : "/api/dashboard",
+            "scheduler_status"  : "/api/v1/admin/scheduler",
         }
     }
 
@@ -135,10 +120,15 @@ def root():
 @app.get("/health", tags=["Root"])
 def health():
     """Health check untuk monitoring."""
+    info = predictor.get_cache_info()
+    n_merah = len(info.get("models_merah", []))
+    n_rawit = len(info.get("models_rawit", []))
     return {
         "status"      : "ok",
-        "model_ready" : len(predictor.get_cache_info().get("models_loaded", [])) > 0,
-        "n_model"     : len(predictor.get_cache_info().get("models_loaded", [])),
+        "merah_ready" : n_merah > 0,
+        "rawit_ready" : n_rawit > 0,
+        "n_model_merah": n_merah,
+        "n_model_rawit": n_rawit,
     }
 
 
@@ -147,8 +137,4 @@ def health():
 # =============================================================================
 app.include_router(predict.router,   prefix="/api/predict",   tags=["Prediksi"])
 app.include_router(history.router,   prefix="/api/history",   tags=["Historis"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
-app.include_router(realtime.router,  prefix="/api/realtime",  tags=["Real-time Data"])
-app.include_router(cache.router,     prefix="/api/v1/cache",  tags=["Cache"])
-app.include_router(admin.router,     prefix="/api/v1/admin",  tags=["Admin"])
-
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])

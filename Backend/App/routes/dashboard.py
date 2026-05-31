@@ -18,7 +18,6 @@ from config.settings import (
     TARGET,
     BATAS_HARGA_TINGGI,
     BATAS_HARGA_KRITIS,
-    REALTIME_STATUS_FILE,
 )
 from app.core import predictor
 from app.schemas.predict import DashboardResponse, StatistikBulananItem
@@ -33,30 +32,17 @@ NAMA_BULAN = [
 
 
 def _get_realtime_info() -> dict:
-    """Baca realtime_status.json untuk info real-time di dashboard."""
-    import json
-    try:
-        if REALTIME_STATUS_FILE.exists():
-            with open(REALTIME_STATUS_FILE, "r", encoding="utf-8") as f:
-                st = json.load(f)
-            return {
-                "data_status"        : st.get("harga_status", "fallback"),
-                "waktu_update"       : st.get("waktu_update"),
-                "harga_hari_ini_sumber": "PIHPS BI" if st.get("harga_status") == "live" else "Data historis",
-                "cuaca_sekarang"     : {
-                    "suhu_rata"  : st.get("suhu_rata"),
-                    "kelembaban" : st.get("kelembaban"),
-                    "curah_hujan": st.get("curah_hujan"),
-                    "status"     : st.get("cuaca_status", "unknown"),
-                },
-            }
-    except Exception:
-        pass
+    """Info data telah diubah menjadi statis tanpa realtime."""
     return {
-        "data_status"          : "fallback",
+        "data_status"          : "statis",
         "waktu_update"         : None,
         "harga_hari_ini_sumber": "Data historis",
-        "cuaca_sekarang"       : None,
+        "cuaca_sekarang"       : {
+            "suhu_rata"  : 27.0,
+            "kelembaban" : 80.0,
+            "curah_hujan": 5.0,
+            "status"     : "fallback",
+        },
     }
 
 
@@ -69,21 +55,16 @@ def _load_dataset() -> pd.DataFrame:
     return predictor.get_dataset()
 
 
-def _detect_tren(df: pd.DataFrame) -> str:
+def _detect_tren(df: pd.DataFrame, target_col: str = TARGET) -> str:
     """
     Deteksi tren harga berdasarkan perbandingan:
     - avg_7      : rata-rata harga 7 hari terakhir
     - avg_14_prev: rata-rata harga 7 hari sebelum 7 hari terakhir (hari ke-8 s/d ke-14)
-
-    Kriteria:
-    - naik   : avg_7 > avg_14_prev * 1.02
-    - turun  : avg_7 < avg_14_prev * 0.98
-    - stabil : di antara keduanya
     """
-    if len(df) < 14:
+    if len(df) < 14 or target_col not in df.columns:
         return "stabil"
 
-    recent_14 = df[TARGET].iloc[-14:]
+    recent_14 = df[target_col].iloc[-14:]
     avg_7      = recent_14.iloc[-7:].mean()
     avg_14_prev = recent_14.iloc[:7].mean()
 
@@ -151,15 +132,22 @@ async def get_dashboard():
                 detail=f"Dataset kosong atau kolom '{TARGET}' tidak ditemukan.",
             )
 
-        # ---- Statistik 30 hari terakhir ----
+        # ---- Statistik 30 hari terakhir (Merah) ----
         df_30 = df.tail(30)
         harga_min  = float(df_30[TARGET].min())
         harga_max  = float(df_30[TARGET].max())
         harga_rata = float(df_30[TARGET].mean())
 
+        # ---- Statistik 30 hari terakhir (Rawit) ----
+        harga_min_rawit = float(df_30["harga_cabai_rawit"].min()) if "harga_cabai_rawit" in df_30.columns else None
+        harga_max_rawit = float(df_30["harga_cabai_rawit"].max()) if "harga_cabai_rawit" in df_30.columns else None
+        harga_rata_rawit = float(df_30["harga_cabai_rawit"].mean()) if "harga_cabai_rawit" in df_30.columns else None
+
         # ---- Data hari ini (baris terakhir) ----
         baris_terakhir = df.iloc[-1].copy()
         harga_hari_ini = float(baris_terakhir[TARGET])
+        harga_hari_ini_rawit = float(baris_terakhir["harga_cabai_rawit"]) if "harga_cabai_rawit" in baris_terakhir else None
+        
         tanggal_update = (
             baris_terakhir["tanggal"].strftime("%Y-%m-%d")
             if hasattr(baris_terakhir["tanggal"], "strftime")
@@ -167,7 +155,8 @@ async def get_dashboard():
         )
 
         # ---- Deteksi tren ----
-        tren = _detect_tren(df)
+        tren = _detect_tren(df, TARGET)
+        tren_rawit = _detect_tren(df, "harga_cabai_rawit")
 
         # ---- Prediksi semua horizon menggunakan fitur terkini standar ----
         # Hal ini menjamin nilai prediksi sama persis dengan halaman /prediksi
@@ -175,9 +164,14 @@ async def get_dashboard():
         prediksi_h1 = await _predict_for_input("h1", input_data_prediksi)
         prediksi_h3 = await _predict_for_input("h3", input_data_prediksi)
         prediksi_h7 = await _predict_for_input("h7", input_data_prediksi)
+        
+        prediksi_rawit_h1 = await _predict_for_input("rawit_h1", input_data_prediksi)
+        prediksi_rawit_h3 = await _predict_for_input("rawit_h3", input_data_prediksi)
+        prediksi_rawit_h7 = await _predict_for_input("rawit_h7", input_data_prediksi)
 
         # ---- Status inflasi berdasarkan prediksi H+1 ----
         status_inflasi = _determine_status_inflasi(prediksi_h1)
+        status_inflasi_rawit = _determine_status_inflasi(prediksi_rawit_h1)
 
         # ---- Status model ----
         info = predictor.get_cache_info()
@@ -190,6 +184,8 @@ async def get_dashboard():
 
         return DashboardResponse(
             tanggal_update=tanggal_update,
+            
+            # Cabai Merah
             harga_hari_ini=round(harga_hari_ini, 2),
             harga_min_30hari=round(harga_min, 2),
             harga_max_30hari=round(harga_max, 2),
@@ -198,9 +194,22 @@ async def get_dashboard():
             prediksi_h1=prediksi_h1,
             prediksi_h3=prediksi_h3,
             prediksi_h7=prediksi_h7,
+            status_inflasi=status_inflasi,
+            
+            # Cabai Rawit
+            harga_hari_ini_rawit=round(harga_hari_ini_rawit, 2) if harga_hari_ini_rawit is not None else None,
+            harga_min_30hari_rawit=round(harga_min_rawit, 2) if harga_min_rawit is not None else None,
+            harga_max_30hari_rawit=round(harga_max_rawit, 2) if harga_max_rawit is not None else None,
+            harga_rata_30hari_rawit=round(harga_rata_rawit, 2) if harga_rata_rawit is not None else None,
+            tren_rawit=tren_rawit,
+            prediksi_rawit_h1=prediksi_rawit_h1,
+            prediksi_rawit_h3=prediksi_rawit_h3,
+            prediksi_rawit_h7=prediksi_rawit_h7,
+            status_inflasi_rawit=status_inflasi_rawit,
+            
+            # Global
             status_model=status_model,
             n_model_aktif=n_model_aktif,
-            status_inflasi=status_inflasi,
             realtime=realtime_info,
         )
 

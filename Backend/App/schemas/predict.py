@@ -98,6 +98,7 @@ class CacheInfoResponse(BaseModel):
 class DashboardResponse(BaseModel):
     """Response dari GET /api/dashboard/."""
     tanggal_update    : str
+    # Cabai Merah
     harga_hari_ini    : float
     harga_min_30hari  : float
     harga_max_30hari  : float
@@ -106,9 +107,22 @@ class DashboardResponse(BaseModel):
     prediksi_h1       : Optional[float] = None
     prediksi_h3       : Optional[float] = None
     prediksi_h7       : Optional[float] = None
+    status_inflasi    : str               # "normal" | "waspada" | "kritis"
+    
+    # Cabai Rawit
+    harga_hari_ini_rawit    : Optional[float] = None
+    harga_min_30hari_rawit  : Optional[float] = None
+    harga_max_30hari_rawit  : Optional[float] = None
+    harga_rata_30hari_rawit : Optional[float] = None
+    tren_rawit              : Optional[str] = None
+    prediksi_rawit_h1       : Optional[float] = None
+    prediksi_rawit_h3       : Optional[float] = None
+    prediksi_rawit_h7       : Optional[float] = None
+    status_inflasi_rawit    : Optional[str] = None
+
+    # Global
     status_model      : bool
     n_model_aktif     : int
-    status_inflasi    : str               # "normal" | "waspada" | "kritis"
     realtime          : Optional[dict]  = None
 
 

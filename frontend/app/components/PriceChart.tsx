@@ -34,6 +34,8 @@ interface PriceChartProps {
   prediksiH1?: number | null;
   prediksiH3?: number | null;
   prediksiH7?: number | null;
+  lineColor?: string;
+  datasetLabel?: string;
 }
 
 export default function PriceChart({
@@ -42,6 +44,8 @@ export default function PriceChart({
   prediksiH1,
   prediksiH3,
   prediksiH7,
+  lineColor = "#0F6E56",
+  datasetLabel = "Harga Aktual",
 }: PriceChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
@@ -109,9 +113,11 @@ export default function PriceChart({
     }
 
     // --- Gradient for actual line ---
-    const greenGradient = ctx.createLinearGradient(0, 0, 0, 350);
-    greenGradient.addColorStop(0, "rgba(15, 110, 86, 0.15)");
-    greenGradient.addColorStop(1, "rgba(15, 110, 86, 0.01)");
+    const lineGradient = ctx.createLinearGradient(0, 0, 0, 350);
+    // Convert hex to rgb for rgba usage (simple hack for our 2 colors)
+    const rgbaColor = lineColor === "#0F6E56" ? "15, 110, 86" : "230, 81, 0"; // #e65100
+    lineGradient.addColorStop(0, `rgba(${rgbaColor}, 0.15)`);
+    lineGradient.addColorStop(1, `rgba(${rgbaColor}, 0.01)`);
 
     // Compute reasonable Y axis bounds
     const allValues = [...actualPrices, ...predictedPrices].filter(
@@ -128,14 +134,14 @@ export default function PriceChart({
         datasets: [
           {
             type: "line",
-            label: "Harga Aktual",
+            label: datasetLabel,
             data: actualPrices,
-            borderColor: "#0F6E56",
-            backgroundColor: greenGradient,
+            borderColor: lineColor,
+            backgroundColor: lineGradient,
             borderWidth: 2.5,
             pointRadius: 0,
             pointHoverRadius: 5,
-            pointHoverBackgroundColor: "#0F6E56",
+            pointHoverBackgroundColor: lineColor,
             tension: 0.4,
             fill: true,
             yAxisID: "y",
@@ -143,13 +149,13 @@ export default function PriceChart({
           },
           {
             type: "line",
-            label: "Prediksi",
+            label: `Prediksi ${datasetLabel.replace("Aktual ", "")}`,
             data: predictedPrices,
-            borderColor: "#0F6E56",
+            borderColor: lineColor,
             borderWidth: 2,
             borderDash: [6, 4],
             pointRadius: 4,
-            pointBackgroundColor: "#0F6E56",
+            pointBackgroundColor: lineColor,
             pointBorderColor: "#fff",
             pointBorderWidth: 2,
             pointHoverRadius: 6,
@@ -232,7 +238,7 @@ export default function PriceChart({
         chartRef.current = null;
       }
     };
-  }, [labels, data, prediksiH1, prediksiH3, prediksiH7]);
+  }, [labels, data, prediksiH1, prediksiH3, prediksiH7, lineColor, datasetLabel]);
 
   return <canvas ref={canvasRef} />;
 }

@@ -8,6 +8,8 @@ Backend/machine_learning/output/xgboost_models/best_params.json
 
 # ── Output lainnya ────────────────────────────────────────────────────────────
 Backend/machine_learning/output/expanding_window/
+Backend/machine_learning/output/expanding_window_merah/
+Backend/machine_learning/output/expanding_window_rawit/
 Backend/machine_learning/output/eda/
 Backend/machine_learning/output/xgboost_metrics/
 Backend/machine_learning/output/xgboost_plots/

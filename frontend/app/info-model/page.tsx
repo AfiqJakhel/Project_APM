@@ -12,6 +12,7 @@ import {
    INFO MODEL PAGE
    ══════════════════════════════════════════ */
 export default function InfoModelPage() {
+  const [activeKomoditas, setActiveKomoditas] = useState<"merah" | "rawit">("merah");
   const [info, setInfo] = useState<ModelInfoResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +73,36 @@ export default function InfoModelPage() {
           )}
         </div>
       </header>
+
+      {/* ── Komoditas Selector (Sliding Tab) ─────────────────────────── */}
+      <div style={{ padding: "0 40px", marginTop: "10px" }}>
+        <div className="sliding-tabs-container">
+          <div 
+            className="slider-bg" 
+            style={{
+              width: "50%",
+              left: activeKomoditas === "merah" ? "4px" : "calc(50% - 4px)",
+              background: "linear-gradient(90deg, #0F3E39 0%, #3F9E96 100%)"
+            }}
+          />
+          <button
+            className={`sliding-tab ${activeKomoditas === "merah" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("merah")}
+            disabled={loading}
+          >
+            Cabai Merah
+          </button>
+          <button
+            className={`sliding-tab ${activeKomoditas === "rawit" ? "active" : ""}`}
+            style={{ width: "160px", justifyContent: "center" }}
+            onClick={() => setActiveKomoditas("rawit")}
+            disabled={loading}
+          >
+            Cabai Rawit
+          </button>
+        </div>
+      </div>
 
       <div className="content-area">
         {loading && (
@@ -161,14 +192,17 @@ export default function InfoModelPage() {
                 </div>
                 <div className="card-body">
                   <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-                    {(["h1", "h3", "h7"] as const).map((h) => (
-                      <div key={h} className="metric-card" style={{ border: `2px solid ${health.models[h] ? "var(--green-muted)" : "var(--red-muted)"}` }}>
-                        <div className="metric-label">Model {h.toUpperCase()}</div>
-                        <div className="metric-value" style={{ fontSize: 16, color: statusColor(health.models[h]) }}>
-                          {statusText(health.models[h])}
+                    {(["h1", "h3", "h7"] as const).map((h) => {
+                      const key = (activeKomoditas === "rawit" ? `rawit_${h}` : h) as keyof typeof health.models;
+                      return (
+                        <div key={h} className="metric-card" style={{ border: `2px solid ${health.models[key] ? "var(--green-muted)" : "var(--red-muted)"}` }}>
+                          <div className="metric-label">Model {h.toUpperCase()}</div>
+                          <div className="metric-value" style={{ fontSize: 16, color: statusColor(health.models[key]) }}>
+                            {statusText(health.models[key])}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div className="metric-card" style={{ border: `2px solid ${health.scaler ? "var(--green-muted)" : "var(--red-muted)"}` }}>
                       <div className="metric-label">Scaler</div>
                       <div className="metric-value" style={{ fontSize: 16, color: statusColor(health.scaler) }}>
@@ -191,7 +225,8 @@ export default function InfoModelPage() {
               <>
                 <div className="metrik-cards-grid animate-in delay-2">
                   {(["h1", "h3", "h7"] as const).map((h) => {
-                    const m = info.info[h];
+                    const key = (activeKomoditas === "rawit" ? `rawit_${h}` : h) as keyof typeof info.info;
+                    const m = info.info[key] as any;
                     if (!m || m.error) {
                       return (
                         <div key={h} className="card">

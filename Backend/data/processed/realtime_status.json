@@ -1,12 +1,12 @@
 {
-  "waktu_update": "2026-05-29T12:00:58.884733",
-  "tanggal_data": "2026-05-29",
-  "harga_cabai_merah": 53800.0,
+  "waktu_update": "2026-05-30T23:11:33.949045",
+  "tanggal_data": "2026-05-30",
+  "harga_cabai_merah": 54900.0,
   "harga_status": "live",
   "sumber_harga": "PIHPS BI",
-  "suhu_rata": 29.0,
-  "kelembaban": 75.0,
+  "suhu_rata": 24.8,
+  "kelembaban": 84.0,
   "curah_hujan": 0.0,
   "cuaca_status": "live",
-  "update_status": "already_exists"
+  "update_status": "updated"
 }

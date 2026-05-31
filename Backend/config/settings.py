@@ -4,43 +4,67 @@ settings.py — Konfigurasi global project prediksi harga cabai
 from pathlib import Path
 
 # ── Path ──────────────────────────────────────────────────────────────────────
-BASE_DIR    = Path(__file__).resolve().parent.parent
-# MODEL_DIR: machine_learning/output/expanding_window/ (lokasi model hasil training)
-# Model disimpan dengan format: model_final_{horizon}_YYYYMMDD.pkl
-MODEL_DIR   = BASE_DIR / "machine_learning" / "output" / "expanding_window"
-# SCALER_DIR: machine_learning/output/xgboost_models/ (lokasi scaler.pkl)
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Model cabai MERAH → expanding_window_merah/
+MODEL_DIR_MERAH = BASE_DIR / "machine_learning" / "output" / "expanding_window_merah"
+
+# Model cabai RAWIT → expanding_window_rawit/
+MODEL_DIR_RAWIT = BASE_DIR / "machine_learning" / "output" / "expanding_window_rawit"
+
+# Backward compat: MODEL_DIR masih menunjuk ke merah
+MODEL_DIR   = MODEL_DIR_MERAH
+
+# Scaler (shared, dari preprocessing.py)
 SCALER_DIR  = BASE_DIR / "machine_learning" / "output" / "xgboost_models"
 DATA_DIR    = BASE_DIR / "data" / "processed"
 
 # ── Target ───────────────────────────────────────────────────────────────────
 TARGET       = "harga_cabai_merah"
+TARGET_RAWIT = "harga_cabai_rawit"
 TARGET_COLS  = ["target_h1", "target_h3", "target_h7"]
+TARGET_COLS_RAWIT = ["target_rawit_h1", "target_rawit_h3", "target_rawit_h7"]
 
-# ── Model files ───────────────────────────────────────────────────────────────
-# Model files menggunakan pattern dengan timestamp: model_final_{horizon}_YYYYMMDD.pkl
-# Sistem akan otomatis mencari file terbaru dengan glob pattern
+# ── Model files — pola glob untuk cari file terbaru ───────────────────────────
+# Format: model_final_{label}_{YYYYMMDD}.pkl
 MODEL_FILES = {
-    "h1": "model_final_h1_*.pkl",
-    "h3": "model_final_h3_*.pkl",
-    "h7": "model_final_h7_*.pkl",
+    # Cabai merah (di MODEL_DIR_MERAH)
+    "h1"       : "model_final_h1_*.pkl",
+    "h3"       : "model_final_h3_*.pkl",
+    "h7"       : "model_final_h7_*.pkl",
+    # Cabai rawit (di MODEL_DIR_RAWIT)
+    "rawit_h1" : "model_final_rawit_h1_*.pkl",
+    "rawit_h3" : "model_final_rawit_h3_*.pkl",
+    "rawit_h7" : "model_final_rawit_h7_*.pkl",
 }
+
 FEATURE_FILES = {
-    "h1": "feature_cols_h1.json",
-    "h3": "feature_cols_h3.json",
-    "h7": "feature_cols_h7.json",
+    "h1"       : "feature_cols_h1.json",
+    "h3"       : "feature_cols_h3.json",
+    "h7"       : "feature_cols_h7.json",
+    "rawit_h1" : "feature_cols_rawit_h1.json",
+    "rawit_h3" : "feature_cols_rawit_h3.json",
+    "rawit_h7" : "feature_cols_rawit_h7.json",
 }
 SCALER_FILE = "scaler.pkl"
 
 # ── Threshold early warning inflasi ──────────────────────────────────────────
-BATAS_HARGA_NORMAL  = 50_000   # Rp 50.000/kg (sesuaikan dengan kondisi Padang)
-BATAS_HARGA_TINGGI  = 75_000   # Rp 75.000/kg → warning kuning
-BATAS_HARGA_KRITIS  = 100_000  # Rp 100.000/kg → warning merah
+BATAS_HARGA_NORMAL  = 50_000
+BATAS_HARGA_TINGGI  = 75_000
+BATAS_HARGA_KRITIS  = 100_000
+
+BATAS_RAWIT_NORMAL  = 60_000
+BATAS_RAWIT_TINGGI  = 90_000
+BATAS_RAWIT_KRITIS  = 120_000
 
 # ── Horizon label ─────────────────────────────────────────────────────────────
 HORIZON_LABEL = {
-    "h1": "Prediksi Besok (H+1)",
-    "h3": "Prediksi 3 Hari (H+3)",
-    "h7": "Prediksi 7 Hari (H+7)",
+    "h1"      : "Prediksi Besok (H+1)",
+    "h3"      : "Prediksi 3 Hari (H+3)",
+    "h7"      : "Prediksi 7 Hari (H+7)",
+    "rawit_h1": "Rawit — Prediksi Besok (H+1)",
+    "rawit_h3": "Rawit — Prediksi 3 Hari (H+3)",
+    "rawit_h7": "Rawit — Prediksi 7 Hari (H+7)",
 }
 
 # ── Expanding window config ───────────────────────────────────────────────────
@@ -48,40 +72,4 @@ MIN_TRAIN_DAYS = 365
 STEP_DAYS      = 30
 TEST_DAYS      = 30
 
-# ── Real-time data settings ───────────────────────────────────────────────────
-
-# PIHPS BI — Scraper settings
-PIHPS_URL = "https://www.bi.go.id/hargapangan/TabelHarga/PasarTradisionalDaerah"
-
-# Filter scraping — sesuaikan dengan filter di website PIHPS BI
-PIHPS_PROVINSI  = "Sumatera Barat"
-PIHPS_KOTA      = "Kota Padang"
-PIHPS_KOMODITAS = ["Cabai Merah Keriting", "Cabai Rawit Hijau"]
-
-# Mapping nama komoditas PIHPS ke nama kolom dataset
-PIHPS_KOLOM_MAP = {
-    "Cabai Merah Keriting": "harga_cabai_merah",
-    "Cabai Rawit Hijau"   : "harga_cabai_rawit",
-}
-
-# Open-Meteo API — Koordinat Kota Padang
-CUACA_LATITUDE   = -0.9471
-CUACA_LONGITUDE  = 100.4172
-CUACA_TIMEZONE   = "Asia/Jakarta"
-CUACA_API_URL    = (
-    "https://api.open-meteo.com/v1/forecast"
-    "?latitude={lat}&longitude={lon}"
-    "&current=temperature_2m,relative_humidity_2m,precipitation"
-    "&timezone={tz}"
-)
-
-# Scheduler settings
-SCHEDULER_JAM   = 14   # jam 14.00 WIB
-SCHEDULER_MENIT = 0
-
-# File status real-time (JSON kecil untuk tracking update terakhir)
-REALTIME_STATUS_FILE = DATA_DIR / "realtime_status.json"
-
-# Timeout scraper (detik)
-SCRAPER_TIMEOUT  = 30
-SCRAPER_HEADLESS = True   # True = tidak buka jendela browser
+# ── Real-time data settings (Dihapus) ─────────────────────────────────────────

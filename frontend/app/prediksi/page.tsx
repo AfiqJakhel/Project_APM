@@ -6,14 +6,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { fetchPrediksiAll, type PrediksiItem } from "../lib/api";
+import { fetchPrediksiSemuaKomoditas, type PrediksiItem, type PrediksiSemuaKomoditasResponse } from "../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type HorizonKey = "h1" | "h3" | "h7";
+type KomoditasKey = "merah" | "rawit";
 
 /** Semua data horizon tersimpan di sini setelah satu fetch */
-type PrediksiCache = Record<HorizonKey, PrediksiItem>;
+type PrediksiCache = {
+  merah: Record<HorizonKey, PrediksiItem>;
+  rawit: Record<HorizonKey, PrediksiItem>;
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -64,6 +68,7 @@ function ResultSkeleton() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PrediksiPage() {
+  const [selectedKomoditas, setSelectedKomoditas] = useState<KomoditasKey>("merah");
   const [selectedHorizon, setSelectedHorizon] = useState<HorizonKey>("h1");
   const [cache, setCache] = useState<PrediksiCache | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,21 +79,25 @@ export default function PrediksiPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPrediksiAll();
+      const data = await fetchPrediksiSemuaKomoditas();
 
-      // Ubah array menjadi Record agar akses O(1) per horizon
-      const mapped = data.prediksi.reduce<Partial<PrediksiCache>>((acc, item) => {
-        const key = item.horizon as HorizonKey;
-        acc[key] = item;
-        return acc;
-      }, {});
+      const processPrediksiArray = (arr: PrediksiItem[]) => {
+        return arr.reduce<Partial<Record<HorizonKey, PrediksiItem>>>((acc, item) => {
+          // Normalize horizon key, e.g. "rawit_h1" -> "h1"
+          const key = (item.horizon.replace("rawit_", "") as HorizonKey);
+          acc[key] = item;
+          return acc;
+        }, {}) as Record<HorizonKey, PrediksiItem>;
+      };
 
-      // Pastikan ketiga horizon ada (guard jika backend partial)
-      if (!mapped.h1 || !mapped.h3 || !mapped.h7) {
+      const mappedMerah = processPrediksiArray(data.merah.prediksi);
+      const mappedRawit = processPrediksiArray(data.rawit.prediksi);
+
+      if (!mappedMerah.h1 || !mappedRawit.h1) {
         throw new Error("Data horizon tidak lengkap dari server.");
       }
 
-      setCache(mapped as PrediksiCache);
+      setCache({ merah: mappedMerah, rawit: mappedRawit });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal memuat prediksi.");
     } finally {
@@ -102,7 +111,7 @@ export default function PrediksiPage() {
   }, [loadAll]);
 
   // Data aktif diambil langsung dari cache — NO fetch
-  const result: PrediksiItem | null = cache ? cache[selectedHorizon] : null;
+  const result: PrediksiItem | null = cache ? cache[selectedKomoditas][selectedHorizon] : null;
   const info = horizonInfo[selectedHorizon];
   const status = result ? statusBadge(result.prediksi_rp) : null;
 
@@ -116,6 +125,36 @@ export default function PrediksiPage() {
       </header>
 
       <div className="content-area">
+        {/* ── Komoditas Selector (Sliding Tab) ─────────────────────────── */}
+        <div style={{ marginBottom: "20px" }}>
+          <div className="sliding-tabs-container">
+            <div 
+              className="slider-bg" 
+              style={{
+                width: "50%",
+                left: selectedKomoditas === "merah" ? "4px" : "calc(50% - 4px)",
+                background: "linear-gradient(90deg, #0F3E39 0%, #3F9E96 100%)"
+              }}
+            />
+            <button
+              className={`sliding-tab ${selectedKomoditas === "merah" ? "active" : ""}`}
+              style={{ width: "160px", justifyContent: "center" }}
+              onClick={() => setSelectedKomoditas("merah")}
+              disabled={loading}
+            >
+              Cabai Merah
+            </button>
+            <button
+              className={`sliding-tab ${selectedKomoditas === "rawit" ? "active" : ""}`}
+              style={{ width: "160px", justifyContent: "center" }}
+              onClick={() => setSelectedKomoditas("rawit")}
+              disabled={loading}
+            >
+              Cabai Rawit
+            </button>
+          </div>
+        </div>
+
         {/* ── Horizon Selector ─────────────────────────────────────────── */}
         <div className="card animate-in delay-1">
           <div className="card-header">

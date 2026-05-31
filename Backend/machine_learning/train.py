@@ -268,15 +268,15 @@ def buat_expanding_windows(df: pd.DataFrame) -> list[dict]:
 # =============================================================================
 # BAGIAN 2 — METRIK & ML
 # =============================================================================
-def hitung_da(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    if len(y_true) < 2: return float("nan")
-    diff_true = np.diff(y_true)
-    diff_pred = np.diff(y_pred)
+def hitung_da(y_true: np.ndarray, y_pred: np.ndarray, ref_val: np.ndarray) -> float:
+    # Arah pergerakan dievaluasi antara harga target masa depan terhadap harga saat prediksi dibuat (ref_val)
+    diff_true = y_true - ref_val
+    diff_pred = y_pred - ref_val
     mask = diff_true != 0
     if np.sum(mask) == 0: return float("nan")
     return float(np.mean(np.sign(diff_true[mask]) == np.sign(diff_pred[mask])) * 100)
 
-def hitung_semua_metrik(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
+def hitung_semua_metrik(y_true: np.ndarray, y_pred: np.ndarray, ref_val: np.ndarray) -> dict:
     denom = np.abs(y_true) + np.abs(y_pred)
     mask = denom != 0
     smape = float(np.mean(2 * np.abs(y_true[mask] - y_pred[mask]) / denom[mask]) * 100)
@@ -290,7 +290,7 @@ def hitung_semua_metrik(y_true: np.ndarray, y_pred: np.ndarray) -> dict:
         "MAPE" : mape,
         "sMAPE": smape,
         "R2"   : float(r2_score(y_true, y_pred)),
-        "DA"   : hitung_da(y_true, y_pred),
+        "DA"   : hitung_da(y_true, y_pred, ref_val),
     }
 
 def buat_sample_weights(n: int, decay: float = 0.001) -> np.ndarray:
@@ -419,7 +419,7 @@ def tuning_final(df: pd.DataFrame, target_col: str, label: str, cfg: KomoditasCo
         param = {
             "n_estimators"     : trial.suggest_int("n_estimators", 100, 300),
             "max_depth"        : trial.suggest_int("max_depth", 2, 4),
-            "learning_rate"    : trial.suggest_float("learning_rate", 0.01, 0.1),
+            "learning_rate"    : trial.suggest_float("learning_rate", 0.005, 0.2, log=True),
             "subsample"        : trial.suggest_float("subsample", 0.5, 0.8),
             "colsample_bytree" : trial.suggest_float("colsample_bytree", 0.5, 0.8),
             "min_child_weight" : trial.suggest_int("min_child_weight", 5, 15),
@@ -451,13 +451,11 @@ def tuning_final(df: pd.DataFrame, target_col: str, label: str, cfg: KomoditasCo
                 
         return np.mean(mses)
         
-    pruner  = MedianPruner(n_startup_trials=10, n_warmup_steps=5)
-    sampler = TPESampler(seed=RANDOM_STATE)
-    
     # Mute optuna logger
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-    study = optuna.create_study(direction="minimize", sampler=sampler, pruner=pruner)
-    study.optimize(objective, n_trials=150, timeout=300)
+    sampler = TPESampler(seed=RANDOM_STATE)
+    study = optuna.create_study(direction="minimize", sampler=sampler, pruner=MedianPruner())
+    study.optimize(objective, n_trials=200, timeout=300)
     
     best = study.best_params
     best_mse = study.best_value
@@ -471,7 +469,7 @@ def tuning_final(df: pd.DataFrame, target_col: str, label: str, cfg: KomoditasCo
         "label": label,
         "horizon_days": gap,
         "n_splits": 10,
-        "n_iter": 150,
+        "n_iter": 200,
         "tuning_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     
@@ -507,7 +505,7 @@ def expanding_window_eval(df: pd.DataFrame, windows: list[dict], target_col: str
             y_pred_abs_xgb = ref_test * np.exp(y_pred_log_xgb)
             # Kliping: prediksi tidak boleh < Rp 1000 (sanity check)
             y_pred_abs_xgb = np.clip(y_pred_abs_xgb, 1000, None)
-            m_xgb = hitung_semua_metrik(y_true_abs, y_pred_abs_xgb)
+            m_xgb = hitung_semua_metrik(y_true_abs, y_pred_abs_xgb, ref_test)
             global_y_true.extend(y_true_abs)
             global_y_pred.extend(y_pred_abs_xgb)
         except Exception: continue
@@ -516,14 +514,14 @@ def expanding_window_eval(df: pd.DataFrame, windows: list[dict], target_col: str
         try:
             y_pred_log_ridge = ridge_baseline_window(X_train, y_train, X_test)
             y_pred_abs_ridge = np.clip(ref_test * np.exp(y_pred_log_ridge), 1000, None)
-            m_ridge = hitung_semua_metrik(y_true_abs, y_pred_abs_ridge)
+            m_ridge = hitung_semua_metrik(y_true_abs, y_pred_abs_ridge, ref_test)
         except Exception as e:
             # [FIX-4]
             log(f"    ! Ridge error di window {w['window']}: {e}")
             m_ridge = {"MAE": 0, "RMSE": 0, "DA": 0}
 
         # Naive (prediksi log_return=0 -> harga = harga hari ini)
-        m_naive = hitung_semua_metrik(y_true_abs, ref_test)
+        m_naive = hitung_semua_metrik(y_true_abs, ref_test, ref_test)
 
         records.append({
             "window"              : w["window"],

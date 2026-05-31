@@ -404,6 +404,9 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
         df[f"roll_std_{w}"] = s_base.rolling(w).std()
         df[f"ema_{w}"] = s_base.ewm(span=w, adjust=False).mean()
         
+        # BARU: Sinyal Anomali Pasar (Z-Score)
+        df[f"zscore_{w}"] = (df[TARGET] - df[f"roll_mean_{w}"]) / (df[f"roll_std_{w}"] + 1e-8)
+        
     df["ema_crossover_7_30"] = df["ema_7"] - df["ema_30"]
 
     # ── E. Momentum (hanya jangka pendek) ─────────────────────────────────

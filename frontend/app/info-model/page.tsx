@@ -40,8 +40,8 @@ export default function InfoModelPage() {
     load();
   }, []);
 
-  const statusColor = (ok: boolean) => (ok ? "var(--green)" : "var(--red)");
-  const statusText = (ok: boolean) => (ok ? "Aktif" : "Tidak tersedia");
+  const statusColor = (ok: boolean | undefined) => (ok ? "var(--green)" : "var(--red)");
+  const statusText = (ok: boolean | undefined) => (ok ? "Aktif" : "Tidak tersedia");
 
   const horizonColors: Record<string, string> = {
     h1: "#0F6E56",

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisasi Pipeline Prediksi Harga Cabai</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --blue: #3b82f6;
+            --purple: #8b5cf6;
+            --orange: #f59e0b;
+            --green: #10b981;
+            --red: #ef4444;
+            --border-color: #334155;
+            --hover-bg: #2dd4bf;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1, h2 {
+            text-align: center;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 60px;
+        }
+
+        .pipeline-section {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .pipeline-section h2 {
+            margin-top: 0;
+            margin-bottom: 30px;
+            font-size: 1.5rem;
+            color: #cbd5e1;
+        }
+
+        /* Flowchart Styles */
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .node {
+            width: 280px;
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+            border: 2px solid transparent;
+        }
+
+        .node:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            filter: brightness(1.1);
+        }
+
+        .node-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .node-desc {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.4;
+        }
+
+        /* Tooltip */
+        .node::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 110%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #ffffff;
+            color: #0f172a;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .node::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 6px;
+            border-style: solid;
+            border-color: #ffffff transparent transparent transparent;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .node:hover::after, .node:hover::before {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Arrows */
+        .arrow-down {
+            width: 2px;
+            height: 24px;
+            background-color: var(--border-color);
+            position: relative;
+        }
+
+        .arrow-down::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: -4px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: var(--border-color) transparent transparent transparent;
+        }
+
+        /* Node Colors */
+        .color-input { background: linear-gradient(135deg, #2563eb, #1d4ed8); border-color: #3b82f6; }
+        .color-transform { background: linear-gradient(135deg, #7c3aed, #6d28d9); border-color: #8b5cf6; }
+        .color-selection { background: linear-gradient(135deg, #d97706, #b45309); border-color: #f59e0b; }
+        .color-output { background: linear-gradient(135deg, #059669, #047857); border-color: #10b981; }
+
+        /* Parallel Branches */
+        .branches-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .branch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+            flex: 1;
+            position: relative;
+        }
+
+        .branch::before {
+            content: '';
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            width: 2px;
+            height: 30px;
+            background-color: var(--border-color);
+            z-index: 0;
+        }
+
+        .branch-h1::before {
+            width: 50%;
+            left: 50%;
+            border-top: 2px solid var(--border-color);
+            border-left: 2px solid var(--border-color);
+            height: 30px;
+            top: -30px;
+            border-top-left-radius: 8px;
+        }
+
+        .branch-h3::before {
+            top: -30px;
+            height: 30px;
+        }
+
+        .branch-h7::before {
+            width: 50%;
+            right: 50%;
+            left: auto;
+            border-top: 2px solid var(--border-color);
+            border-right: 2px solid var(--border-color);
+            height: 30px;
+            top: -30px;
+            border-top-right-radius: 8px;
+        }
+
+        .converge-arrow {
+            display: flex;
+            justify-content: center;
+            position: relative;
+            height: 30px;
+            width: 100%;
+        }
+
+        .converge-line {
+            position: absolute;
+            top: 0;
+            width: 66.66%;
+            height: 15px;
+            border-bottom: 2px solid var(--border-color);
+            border-left: 2px solid var(--border-color);
+            border-right: 2px solid var(--border-color);
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+
+        .converge-down {
+            position: absolute;
+            top: 15px;
+            height: 15px;
+            width: 2px;
+            background-color: var(--border-color);
+        }
+
+        .converge-down::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: -4px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: var(--border-color) transparent transparent transparent;
+        }
+
+        /* Legend */
+        .legend {
+            margin-top: 40px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            background-color: var(--card-bg);
+            padding: 15px 30px;
+            border-radius: 50px;
+            border: 1px solid var(--border-color);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+
+        @media (max-width: 768px) {
+            .branches-container {
+                flex-direction: column;
+                gap: 40px;
+            }
+            .branch::before, .converge-line {
+                display: none;
+            }
+            .converge-arrow {
+                height: 20px;
+            }
+            .node { width: 100%; max-width: 300px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Arsitektur Pipeline ML Prediksi Cabai</h1>
+    <div class="subtitle">Visualisasi Alur Preprocessing dan Pelatihan Model XGBoost Multi-Horizon</div>
+
+    <div class="container">
+        
+        <!-- VISUALISASI 1: PREPROCESSING -->
+        <div class="pipeline-section">
+            <h2>Visualisasi 1: Pipeline Preprocessing</h2>
+            <div class="flowchart">
+                <div class="node color-input" data-tooltip="Pembacaan data mentah menggunakan library pandas. Data mencakup historis cuaca, harga, dan hari libur.">
+                    <div class="node-title">Load Data Mentah</div>
+                    <div class="node-desc">pd.read_csv · 1536 baris · 74 fitur</div>
+                </div>
+                
+                <div class="arrow-down"></div>
+                
+                <div class="node color-transform" data-tooltip="Mendeteksi siklus hari raya menggunakan hijridate dan library holidays, dienkode ke features.">
+                    <div class="node-title">Fitur Kalender & Hari Raya</div>
+                    <div class="node-desc">is_weekend · day_of_week · is_holiday</div>
+                </div>
+                
+                <div class="arrow-down"></div>
+                
+                <div class="node color-transform" data-tooltip="Transformasi lags, moving average, serta menangkap variabel proxy seperti momentum harga dan rasio cross-commodity.">
+                    <div class="node-title">Feature Engineering</div>
+                    <div class="node-desc">Lag · Rolling · EMA · Momentum</div>
+                </div>
+                
+                <div class="arrow-down"></div>
+                
+                <div class="node color-selection" data-tooltip="Menghilangkan noise (variance rendah) dan fitur redunda (korelasi r>0.95), namun mempertahankan anomali cuaca hujan.">
+                    <div class="node-title">Feature Selection</div>
+                    <div class="node-desc">Buang 12 fitur bising · threshold importance</div>
+                </div>
+                
+                <div class="arrow-down"></div>
+                
+                <div class="node color-transform" data-tooltip="Konstruksi variabel target dengan log-return untuk menghindari model berperilaku Naive Baseline.">
+                    <div class="node-title">Konstruksi Target</div>
+                    <div class="node-desc">H1 · H3 · H7 via log-return</div>
+                </div>
+                
+                <div class="arrow-down"></div>
+                
+                <div class="node color-output" data-tooltip="Menghasilkan DataFrame bersih bebas leakage yang siap untuk dimasukkan dalam mesin pembelajaran.">
+                    <div class="node-title">DataFrame Siap Training</div>
+                    <div class="node-desc">~62 fitur final · label H1/H3/H7</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISUALISASI 2: TRAINING MODEL -->
+        <div class="pipeline-section">
+            <h2>Visualisasi 2: Pipeline Training Model</h2>
+            <div class="flowchart">
+                <div class="node color-input" style="width: 320px;" data-tooltip="Skema validasi out-of-sample seiring waktu (minimum training 365 hari awal) mencegah data masa depan bocor.">
+                    <div class="node-title">Expanding Window</div>
+                    <div class="node-desc">39 window · min train 365 hari</div>
+                </div>
+                
+                <div style="height: 30px; width: 100%; position: relative;">
+                    <div style="position: absolute; top: 0; left: 50%; width: 2px; height: 15px; background: var(--border-color);"></div>
+                    <div style="position: absolute; top: 15px; width: 66.66%; left: 16.66%; border-top: 2px solid var(--border-color);"></div>
+                </div>
+
+                <div class="branches-container">
+                    <!-- Branch H1 -->
+                    <div class="branch branch-h1">
+                        <div style="color: #cbd5e1; font-weight: bold; background: #334155; padding: 4px 16px; border-radius: 20px; font-size: 0.85rem;">Target H1</div>
+                        <div class="node color-transform" data-tooltip="Eksplorasi ruang pencarian XGBoost, bobot time-decay, dan pencarian hyperparameter via Optuna TPE.">
+                            <div class="node-title">Optuna Tuning</div>
+                            <div class="node-desc">100 trial · time-decay weights</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-transform" data-tooltip="Inisialisasi model prediksi akhir dengan parameter terbaik pada seluruh corpus dataset H1.">
+                            <div class="node-title">Train Model Final</div>
+                            <div class="node-desc">XGBoost · best params</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-selection" data-tooltip="Penilaian kinerja dengan MAE, R-Squared global, dan akurasi direksional.">
+                            <div class="node-title">Evaluasi</div>
+                            <div class="node-desc">MAE · R² · RMSE · DA</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-transform" data-tooltip="Menghitung interaksi fitur dengan game-theory Shapley. Verifikasi de-tren berhasil.">
+                            <div class="node-title">SHAP Analysis</div>
+                            <div class="node-desc">TreeExplainer · top-10 fitur</div>
+                        </div>
+                    </div>
+
+                    <!-- Branch H3 -->
+                    <div class="branch branch-h3">
+                        <div style="color: #cbd5e1; font-weight: bold; background: #334155; padding: 4px 16px; border-radius: 20px; font-size: 0.85rem;">Target H3</div>
+                        <div class="node color-transform" data-tooltip="Eksplorasi ruang pencarian XGBoost, bobot time-decay, dan pencarian hyperparameter via Optuna TPE.">
+                            <div class="node-title">Optuna Tuning</div>
+                            <div class="node-desc">100 trial · time-decay weights</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-transform" data-tooltip="Inisialisasi model prediksi akhir dengan parameter terbaik pada seluruh corpus dataset H3.">
+                            <div class="node-title">Train Model Final</div>
+                            <div class="node-desc">XGBoost · best params</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-selection" data-tooltip="Penilaian kinerja dengan MAE, R-Squared global, dan akurasi direksional.">
+                            <div class="node-title">Evaluasi</div>
+                            <div class="node-desc">MAE · R² · RMSE · DA</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-transform" data-tooltip="Menghitung interaksi fitur dengan game-theory Shapley. Verifikasi de-tren berhasil.">
+                            <div class="node-title">SHAP Analysis</div>
+                            <div class="node-desc">TreeExplainer · top-10 fitur</div>
+                        </div>
+                    </div>
+
+                    <!-- Branch H7 -->
+                    <div class="branch branch-h7">
+                        <div style="color: #cbd5e1; font-weight: bold; background: #334155; padding: 4px 16px; border-radius: 20px; font-size: 0.85rem;">Target H7</div>
+                        <div class="node color-transform" data-tooltip="Eksplorasi ruang pencarian XGBoost, bobot time-decay, dan pencarian hyperparameter via Optuna TPE.">
+                            <div class="node-title">Optuna Tuning</div>
+                            <div class="node-desc">100 trial · time-decay weights</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-transform" data-tooltip="Inisialisasi model prediksi akhir dengan parameter terbaik pada seluruh corpus dataset H7.">
+                            <div class="node-title">Train Model Final</div>
+                            <div class="node-desc">XGBoost · best params</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-selection" data-tooltip="Penilaian kinerja dengan MAE, R-Squared global, dan akurasi direksional.">
+                            <div class="node-title">Evaluasi</div>
+                            <div class="node-desc">MAE · R² · RMSE · DA</div>
+                        </div>
+                        <div class="arrow-down"></div>
+                        <div class="node color-transform" data-tooltip="Menghitung interaksi fitur dengan game-theory Shapley. Verifikasi de-tren berhasil.">
+                            <div class="node-title">SHAP Analysis</div>
+                            <div class="node-desc">TreeExplainer · top-10 fitur</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="converge-arrow">
+                    <div class="converge-line"></div>
+                    <div class="converge-down"></div>
+                </div>
+
+                <div class="node color-output" style="width: 320px;" data-tooltip="Serangkaian model diekspor terintegrasi beserta time stamp untuk kehandalan akses API di Backend FastAPI.">
+                    <div class="node-title">Simpan Model .pkl</div>
+                    <div class="node-desc">joblib · naming dengan timestamp</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #2563eb, #1d4ed8);"></div>
+                <span>Input / Inisialisasi</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #7c3aed, #6d28d9);"></div>
+                <span>Proses Transformasi</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #d97706, #b45309);"></div>
+                <span>Seleksi & Evaluasi</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #059669, #047857);"></div>
+                <span>Output / Target Akhir</span>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

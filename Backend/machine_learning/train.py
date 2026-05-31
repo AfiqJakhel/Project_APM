@@ -144,75 +144,6 @@ def load_dataset() -> pd.DataFrame:
     return df
 
 
-def add_calendar_features(df: pd.DataFrame) -> pd.DataFrame:
-    log("\n[1B] Menambahkan fitur kalender dan hari raya (menggunakan library)...")
-    df = df.copy()
-    
-    from hijridate import Gregorian, Hijri
-    import holidays
-    
-    # 1. Fitur Kalender Dasar
-    df['day_of_week'] = df['tanggal'].dt.dayofweek
-    df['day_of_month'] = df['tanggal'].dt.day
-    df['week_of_year'] = df['tanggal'].dt.isocalendar().week.astype(int)
-    df['month'] = df['tanggal'].dt.month
-    
-    # 5. is_weekend (0/1)
-    # Cukup menggunakan pandas karena akhir pekan di Indonesia standar (Sabtu-Minggu)
-    df['is_weekend'] = (df['day_of_week'] >= 5).astype(int)
-    
-    # (Opsional) Menggunakan library 'holidays' khusus Indonesia
-    id_holidays = holidays.ID()
-    df['is_libur_nasional_lib'] = df['tanggal'].apply(lambda x: 1 if x in id_holidays else 0)
-    
-    # 6. is_ramadan (0/1) menggunakan hijri-converter
-    def check_ramadan(date):
-        try:
-            h = Gregorian(date.year, date.month, date.day).to_hijri()
-            return 1 if h.month == 9 else 0
-        except OverflowError:
-            return 0
-            
-    df['is_ramadan'] = df['tanggal'].apply(check_ramadan)
-        
-    # 7. days_to_lebaran — SUDAH DIPINDAHKAN ke preprocessing.py
-    # Tidak perlu dihitung ulang di sini karena sudah ada di dataset_preprocessed.csv
-    # (pemindahan ini memastikan fitur tersedia saat inference di production)
-    # Baris lama di-skip agar tidak menimpa kolom yang lebih akurat dari preprocessing.
-    if 'days_to_lebaran' not in df.columns:
-        # Fallback jika belum ada di dataset (backward compat)
-        lebaran_cache = {}
-        min_year = df['tanggal'].min().year
-        max_year = df['tanggal'].max().year
-        for y in range(min_year, max_year + 2):
-            for hy in [y - 580, y - 579, y - 578]:
-                lebaran_g = Hijri(hy, 10, 1).to_gregorian()
-                if lebaran_g.year == y:
-                    lebaran_cache[y] = pd.Timestamp(year=lebaran_g.year, month=lebaran_g.month, day=lebaran_g.day)
-                    break
-        def get_days_to_lebaran(date):
-            lebaran_this_year = lebaran_cache.get(date.year)
-            if lebaran_this_year:
-                return (lebaran_this_year - date).days
-            return 0
-        df['days_to_lebaran'] = df['tanggal'].apply(get_days_to_lebaran)
-    
-    # 8. is_natal_newyear (minggu ke-3 des - minggu ke-1 jan, ~15 Des s/d 7 Jan)
-    df['is_natal_newyear'] = (
-        ((df['tanggal'].dt.month == 12) & (df['tanggal'].dt.day >= 15)) |
-        ((df['tanggal'].dt.month == 1) & (df['tanggal'].dt.day <= 7))
-    ).astype(int)
-    
-    # 9. is_awal_bulan (1-5)
-    df['is_awal_bulan'] = (df['tanggal'].dt.day <= 5).astype(int)
-    
-    # 10. is_akhir_bulan (25-31)
-    df['is_akhir_bulan'] = (df['tanggal'].dt.day >= 25).astype(int)
-    
-    # Fitur kalender mungkin sudah ada di df dengan nama 'bulan', 'is_natal_tahunbaru'
-    # biarkan saja atau fitur ini akan menimpa/menambah. XGBoost akan menyeleksi.
-    log(f"    -> Fitur kalender berhasil ditambahkan. Total fitur saat ini: {df.shape[1] - 2}")
-    return df
 
 def buang_fitur_sampah(df: pd.DataFrame) -> pd.DataFrame:
     # FITUR YANG DIBUANG: hanya yang secara statistik terbukti redundan atau bising.
@@ -225,7 +156,8 @@ def buang_fitur_sampah(df: pd.DataFrame) -> pd.DataFrame:
         #    tidak berpola. Namun curah_hujan dan turunannya KINI DIPERTAHANKAN.
         "suhu_rata", "kelembaban", "lama_penyinaran", "kec_angin",
         # 2. Kalender Redundan
-        "bulan", "kuartal", "is_akhir_bulan", "is_natal_newyear", "is_libur_nasional",
+        "bulan", "kuartal", "is_akhir_bulan", "is_natal_newyear",
+        # "is_libur_nasional" dihapus dari daftar sampah agar digunakan oleh XGBoost
         # 3. Arah yang Kalah Informatif dari pct_change
         "arah_lag1", "arah_lag2", "arah_lag3"
     ]
@@ -692,7 +624,6 @@ def main():
 
     start_time = time.time()
     df = load_dataset()
-    df = add_calendar_features(df)
     df = buang_fitur_sampah(df)
     windows = buat_expanding_windows(df)
 

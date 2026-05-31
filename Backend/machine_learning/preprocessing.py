@@ -4,6 +4,7 @@ import joblib
 import warnings
 import numpy as np
 import pandas as pd
+from hijridate import Gregorian, Hijri
 from pathlib import Path
 from sklearn.preprocessing import RobustScaler
 
@@ -321,9 +322,21 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
 
     # ── A. Kalender (hanya yang informatif untuk harga komoditas) ──────────
     df["bulan"] = df["tanggal"].dt.month
+    df["month"] = df["tanggal"].dt.month
+    df["day_of_week"] = df["tanggal"].dt.dayofweek
+    df["day_of_month"] = df["tanggal"].dt.day
+    df["week_of_year"] = df["tanggal"].dt.isocalendar().week.astype(int)
     df["kuartal"] = df["tanggal"].dt.quarter
     df["is_weekend"] = (df["tanggal"].dt.dayofweek >= 5).astype(int)
     df["is_awal_bulan"] = (df["tanggal"].dt.day <= 7).astype(int)
+
+    def check_ramadan(date):
+        try:
+            h = Gregorian(date.year, date.month, date.day).to_hijri()
+            return 1 if h.month == 9 else 0
+        except OverflowError:
+            return 0
+    df["is_ramadan"] = df["tanggal"].apply(check_ramadan)
     # Enkode siklus bulanan dengan sin/cos (menggantikan bulan mentah)
     df["bulan_sin"] = np.sin(2 * np.pi * df["bulan"] / 12)
     df["bulan_cos"] = np.cos(2 * np.pi * df["bulan"] / 12)
@@ -362,15 +375,25 @@ def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
     df["is_musim_panen"] = df["bulan"].isin([5, 6, 7, 11, 12, 1]).astype(int)
 
-    # BARU: Jarak hari ke Lebaran terdekat (kontinu, 2-arah)
-    # Lebih informatif dari is_pra_lebaran (biner) karena model bisa melihat
-    # seberapa dekat dengan hari raya secara gradual
-    _lebaran_dates = pd.to_datetime(
-        ["2022-05-02", "2023-04-22", "2024-04-10", "2025-03-30", "2026-03-20"]
-    )
-    df["days_to_lebaran"] = df["tanggal"].apply(
-        lambda t: int(min(abs((t - d).days) for d in _lebaran_dates))
-    )
+    # BARU: Jarak hari ke Lebaran terdekat (dinamis menggunakan hijridate)
+    lebaran_cache = {}
+    min_year = df['tanggal'].min().year
+    max_year = df['tanggal'].max().year
+    for y in range(min_year, max_year + 2):
+        for hy in [y - 580, y - 579, y - 578]:
+            try:
+                lebaran_g = Hijri(hy, 10, 1).to_gregorian()
+                if lebaran_g.year == y:
+                    lebaran_cache[y] = pd.Timestamp(year=lebaran_g.year, month=lebaran_g.month, day=lebaran_g.day)
+                    break
+            except Exception:
+                pass
+    def get_days_to_lebaran(date):
+        lebaran_this_year = lebaran_cache.get(date.year)
+        if lebaran_this_year:
+            return (lebaran_this_year - date).days
+        return 0
+    df['days_to_lebaran'] = df['tanggal'].apply(get_days_to_lebaran)
     log(f"    -> days_to_lebaran ditambahkan ke preprocessing (konsistensi training-inference)")
 
     # ── C. Lag harga (selektif — hapus lag berkorelasi tinggi) ────────────

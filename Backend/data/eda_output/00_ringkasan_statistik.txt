@@ -1,0 +1,17 @@
+=== RINGKASAN STATISTIK EDA ===
+Total baris: 1536
+Rentang waktu: 2022-02-02 s/d 2026-04-17
+
+--- HARGA_CABAI_MERAH ---
+Min  : Rp 22,000
+Max  : Rp 97,250
+Mean : Rp 48,865
+Std  : Rp 18,302
+Median: Rp 43,000
+
+--- HARGA_CABAI_RAWIT ---
+Min  : Rp 19,000
+Max  : Rp 74,500
+Mean : Rp 41,417
+Std  : Rp 12,856
+Median: Rp 39,000
